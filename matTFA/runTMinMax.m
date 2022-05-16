@@ -41,8 +41,7 @@ varNames = tModel.varNames;
 TMinMax_LB = zeros(size(varList,1),1);
 TMinMax_UB = zeros(size(varList,1),1);
 
-NCharsToDel = 0;
-for k = 1:length(varList)
+parfor k = 1:length(varList)
     i = ismember(varNames,variables{k});
     % Prepare cplex structure
     cplex = changeToCPLEX_WithOptions(tModel,TimeInSec,manualScalingFactor,mipTolInt,emphPar,feasTol,scalPar,mipDisplay);
@@ -68,8 +67,8 @@ for k = 1:length(varList)
 %     end 
 %     
     %%%% --- Minimization --- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    fprintf(repmat('\b',1,NCharsToDel))                   %
-    fprintf('Minimizing %s\n',tModel.varNames{i});        %
+    %fprintf(repmat('\b',1,NCharsToDel))                   %
+    %fprintf('Minimizing %s\n',tModel.varNames{i});        %
     cplex.Model.sense = 'minimize';                       %
     cplexSol = cplex.solve();                             %
     solval = cplexSol.objval;                             %
@@ -82,8 +81,8 @@ for k = 1:length(varList)
     strToDel = ['Minimizing  ',tModel.varNames{i}];
     NCharsToDel = size(strToDel,2);
     %%%% --- Maximization --- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-    fprintf(repmat('\b',1,NCharsToDel))                   %
-    fprintf('Maximizing %s\n',tModel.varNames{i});        %
+    %fprintf(repmat('\b',1,NCharsToDel))                   %
+    %fprintf('Maximizing %s\n',tModel.varNames{i});        %
     cplex.Model.sense = 'maximize';                       %
     cplexSol = cplex.solve();                             %
     solval = cplexSol.objval;                             %

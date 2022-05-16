@@ -19,24 +19,9 @@ end
 minmax = zeros(length(rxnNames),2);
 rxn_id = find_cell(rxnNames, model.rxns);
 
-for i = 1:length(rxn_id)
-    
-    if verbose && ~isfield(model,'CS_varNames')
-        fprintf('minmax for %s\t',model.rxns{rxn_id(i)});
-        model = changeObjective(model,model.rxns{rxn_id(i)});
-    elseif verbose && isfield(model,'CS_varNames')
-        fprintf('minmax for %s\t',model.CS_varNames{rxn_id(i)});
-        model.c = zeros(size(model.S,2),1);
-        model.c(rxn_id(i)) = 1;
-    end
-    
-    sol = solveFBAmodelCplex(model, scalPar, feasTol, emphPar, 'min');
-    minmax(i,1) = sol.f;
-    sol = solveFBAmodelCplex(model, scalPar, feasTol, emphPar, 'max');
-    minmax(i,2) = sol.f;
-    
-    if verbose
-        fprintf('min: %d\t max: %d\n', minmax(i,1), minmax(i,2));
-    end
-    
+parfor i = 1:length(rxn_id)
+    tmp_model = model;    
+    sol1 = solveFBAmodelCplex(tmp_model, scalPar, feasTol, emphPar, 'min');
+    sol2 = solveFBAmodelCplex(tmp_model, scalPar, feasTol, emphPar, 'max');
+    minmax(i,:) = [sol1.f sol2.f]; 
 end
