@@ -73,7 +73,8 @@ end
 t1 = clock;
 % Solve initial LP
 % if allowLoops
-solution = solveCobraLP_edited(LPproblem,scalPar,feasTol,emphPar);
+% solution = solveCobraLP_edited(LPproblem,scalPar,feasTol,emphPar);
+solution = solveCobraLP(LPproblem);
 % else
 %     MILPproblem = addLoopLawConstraints(LPproblem, model, 1:nRxns);
 %     solution = solveCobraMILP(MILPproblem);
