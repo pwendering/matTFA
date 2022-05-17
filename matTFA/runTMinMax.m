@@ -41,12 +41,18 @@ varNames = tModel.varNames;
 TMinMax_LB = zeros(size(varList,1),1);
 TMinMax_UB = zeros(size(varList,1),1);
 
+environment = getEnvironment;
+solver = getCobraSolver('LP');
 parfor k = 1:length(varList)
+    restoreEnvironment(environment);
+    changeCobraSolver(solver, 'LP', 0, -1);
+
     i = ismember(varNames,variables{k});
     % Prepare cplex structure
     cplex = changeToCPLEX_WithOptions(tModel,TimeInSec,manualScalingFactor,mipTolInt,emphPar,feasTol,scalPar,mipDisplay);
     cplex.Model.obj = zeros(num_vars,1);
     cplex.Model.obj(i) = 1;
+    cplex.Param.threads.Cur = 1;
     
 %     ttmodel.osense = 1;
 %     tsolution = solveTFBAmodel(ttmodel,false,'gurobi_direct');

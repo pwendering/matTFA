@@ -19,7 +19,11 @@ end
 minmax = zeros(length(rxnNames),2);
 rxn_id = find_cell(rxnNames, model.rxns);
 
+environment = getEnvironment;
+solver = getCobraSolver('LP');
 parfor i = 1:length(rxn_id)
+    restoreEnvironment(environment);
+    changeCobraSolver(solver, 'LP', 0, -1);
     tmp_model = model;    
     sol1 = solveFBAmodelCplex(tmp_model, scalPar, feasTol, emphPar, 'min');
     sol2 = solveFBAmodelCplex(tmp_model, scalPar, feasTol, emphPar, 'max');
