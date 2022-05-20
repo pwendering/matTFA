@@ -53,7 +53,8 @@ parfor k = 1:length(varList)
     cplex.Model.obj = zeros(num_vars,1);
     cplex.Model.obj(i) = 1;
     cplex.Param.threads.Cur = 1;
-    
+    cplex.Param.parallel.Cur = 0;
+ 
 %     ttmodel.osense = 1;
 %     tsolution = solveTFBAmodel(ttmodel,false,'gurobi_direct');
 %     solval = tsolution.val;                             %
