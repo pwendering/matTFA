@@ -11,19 +11,19 @@ function isTrans = checkIfRxnIsTransport(reactants,products)
 %   reaction, and 0 otherwise.
  
 isTrans = 0;
-react={};
-prod={};
+
 reactants=columnVector(reactants);
 products=columnVector(products);
- 
+
+react=repmat({''},numel(reactants),1);
+prod=repmat({''},numel(products),1);
+
 for i=1:length(reactants)
-    [reactname,reactComp]=parseMet(reactants{i,1});
-    react{i,1}=reactname;
+    react{i}=parseMet(reactants{i});
 end
  
 for i=1:length(products)
-    [prodname,prodComp]=parseMet(products{i,1});
-    prod{i,1}=prodname;
+    prod{i}=parseMet(products{i});
 end
 for i=1:length(reactants)
     [~, ba]=ismember(prod, react(i));

@@ -20,19 +20,11 @@ function modeloutput = prepModelforTFA(model, ReactionDB, CompartmentData, repla
 
 %% settings
 
-% computes the reaction energies based on group changes
-% should be false if we want to adjust for pH and ionic strength
-useGroupChange = false;  
-
 % replace the metNames with those from the database
 replaceMetNames = true; 
 
-% add the metShortNames
-addMetShortNames = false; 
-
 % default placeholder for null data for mets :
 DEFAULT_NULL = 'NA';
-%%
 
 if ~exist('replaceData','var') || isempty(replaceData)
     replaceData = false;
@@ -81,7 +73,6 @@ else
     modeloutput.CompartmentData = CompartmentData;
 end
 
-noMetCompartment = false;
 %%-----------------------------------------------------------------------%%
 %                              METABOLITES
 %%-----------------------------------------------------------------------%%
@@ -95,7 +86,8 @@ end
 
 % add compartment information if it does not exist
 % or if we can get the compartment info from the met names
-
+% PW: modeloutput is overwritten after this if statement, so the following
+% step could just be excluded
 if noMetCompartment
     disp(['WARNING:metabolite compartment info missing! ', ...
             'Attempting to get it from met']);
@@ -165,12 +157,6 @@ for i=1:num_mets
            model.metNames{i} = ReactionDB.compound.metNames(cpdIndex);
        end
 
-       % adding the metShortNames if requested
-       if (addMetShortNames)
-            model.metShortNames{i} = ...
-                    ReactionDB.compound.metShortNames(cpdIndex);
-       end
-
        if isempty(cpdIndex)
 
            if verboseFlag
@@ -181,44 +167,44 @@ for i=1:num_mets
                fprintf(OUTPUT,'%s : %s not found in ReactionDB\n',...
                    model.mets{i},model.metSEEDID{i});
            end
-           modeloutput.metDeltaGFstd(i,1) = 1E+07;
-           modeloutput.metDeltaGFerr(i,1) = 1E+07;
-           modeloutput.metDeltaGFtr(i,1) = 1E+07;
+           modeloutput.metDeltaGFstd(i) = 1E+07;
+           modeloutput.metDeltaGFerr(i) = 1E+07;
+           modeloutput.metDeltaGFtr(i) = 1E+07;
            if isfield(model,'metCharge') && ~isempty(model.metCharge(i)) && ~isnan(model.metCharge(i))
-               modeloutput.metCharge(i,1) = model.metCharge(i);
+               modeloutput.metCharge(i) = model.metCharge(i);
            else
-               modeloutput.metCharge(i,1) = 0;
+               modeloutput.metCharge(i) = 0;
            end
-           modeloutput.metMass(i,1) = 1E+07;
-           modeloutput.struct_cues{i,1} = {[]};
+           modeloutput.metMass(i) = 1E+07;
+           modeloutput.struct_cues{i} = {[]};
            
            if ~strcmp(model.metFormulas{i},DEFAULT_NULL)
-               modeloutput.metFormulas{i,1} = model.metFormulas{i};
+               modeloutput.metFormulas{i} = model.metFormulas{i};
            else
-               modeloutput.metFormulas{i,1} = DEFAULT_NULL;
+               modeloutput.metFormulas{i} = DEFAULT_NULL;
            end   
        else
 
            % transform the deltaG formation to pH and ionic strength
            % specified for the compartment
            
-           modeloutput.metDeltaGFstd(i,1) = ...
+           modeloutput.metDeltaGFstd(i) = ...
                ReactionDB.compound.deltaGf_std(cpdIndex);
-           modeloutput.metDeltaGFerr(i,1) = ...
+           modeloutput.metDeltaGFerr(i) = ...
                ReactionDB.compound.deltaGf_err(cpdIndex);
-           modeloutput.metCharge(i,1) = ...
+           modeloutput.metCharge(i) = ...
                ReactionDB.compound.Charge_std(cpdIndex);
-           modeloutput.metFormulas{i,1} = ...
+           modeloutput.metFormulas{i} = ...
                ReactionDB.compound.Formula{cpdIndex};
-           modeloutput.metMass(i,1) = ...
+           modeloutput.metMass(i) = ...
                ReactionDB.compound.Mass_std(cpdIndex);
-           modeloutput.metDeltaGFtr(i,1) = ...
+           modeloutput.metDeltaGFtr(i) = ...
                calcDGis(model.metSEEDID(i),...
                         comp_pH,...
                         comp_ionicStr,...
                         'GCM',...
                         ReactionDB);
-           modeloutput.struct_cues{i,1} =...
+           modeloutput.struct_cues{i} =...
                     ReactionDB.compound.struct_cues{cpdIndex};
 
            if verboseFlag
@@ -232,18 +218,6 @@ for i=1:num_mets
        end
    else
 
-       % replace the metnames if requested
-       % pierre: - This has no sense whatsoever.
-       % FLAG: TO EDIT
-       if (replaceMetNames || replaceData)
-           model.metNames{i} = model.metNames{i};
-       end
-
-       % adding the metShortNames if requested
-       if (addMetShortNames)
-            model.metShortNames{i} = model.mets{i};
-       end
-
        if verboseFlag
             fprintf('met %i: %s not found in ReactionDB\n',i,...
                     model.metNames{i});
@@ -253,23 +227,23 @@ for i=1:num_mets
                         model.metNames{i});
        end
 
-       modeloutput.metDeltaGFstd(i,1) = 1E+07;
-       modeloutput.metDeltaGFerr(i,1) = 1E+07;
-       modeloutput.metDeltaGFtr(i,1) = 1E+07;
-       modeloutput.metMass(i,1) = 1E+07;
+       modeloutput.metDeltaGFstd(i) = 1E+07;
+       modeloutput.metDeltaGFerr(i) = 1E+07;
+       modeloutput.metDeltaGFtr(i) = 1E+07;
+       modeloutput.metMass(i) = 1E+07;
 
        if (~strcmp(model.metFormulas{i},DEFAULT_NULL) && ...
                ~isempty(model.metFormulas{i}))
-           modeloutput.metFormulas{i,1} = model.metFormulas{i};
+           modeloutput.metFormulas{i} = model.metFormulas{i};
        else
-           modeloutput.metFormulas{i,1} = DEFAULT_NULL;
+           modeloutput.metFormulas{i} = DEFAULT_NULL;
        end
        if isfield(model,'metCharge') && ~isempty(model.metCharge(i)) && ~isnan(model.metCharge(i))
-           modeloutput.metCharge(i,1) = model.metCharge(i);
+           modeloutput.metCharge(i) = model.metCharge(i);
        else
-           modeloutput.metCharge(i,1) = 0;
+           modeloutput.metCharge(i) = 0;
        end
-       modeloutput.struct_cues{i,1} = DEFAULT_NULL;
+       modeloutput.struct_cues{i} = DEFAULT_NULL;
    end
 end
 
@@ -279,8 +253,10 @@ end
 
 
 modeloutput.rxnThermo = zeros(num_rxns,1);
-modeloutput.rxnDeltaGR = zeros(num_rxns,1);
-modeloutput.rxnDeltaGRerr = zeros(num_rxns,1);
+modeloutput.rxnDeltaGR = 1e7*ones(num_rxns,1);
+modeloutput.rxnDeltaGRerr = 1e7*ones(num_rxns,1);
+modeloutput.rxnComp = repmat({'c'},num_rxns,1);
+modeloutput.rxnMapResult = repmat({''},num_rxns,1);
 
 % computing the reaction thermodynamic data
 % we will put a flag value of 1E+07 and also flag not to create thermo constraints for:
@@ -290,7 +266,7 @@ modeloutput.rxnDeltaGRerr = zeros(num_rxns,1);
 
 disp('computing reaction thermodynamic data');
 num_drain=0;
-
+rhs = zeros(num_rxns,1);
 for i=1:num_rxns
     
     if verboseFlag
@@ -307,7 +283,6 @@ for i=1:num_rxns
     metCompartments = modeloutput.metCompSymbol(met_indices);
     reactantDeltaGFstd = modeloutput.metDeltaGFtr(met_indices);
     metCharge = modeloutput.metCharge(met_indices);
-    metFormula = modeloutput.metFormulas(met_indices);
     
     if isfield(model,'metSpecie')
         metSpecie = ones(length(reactants),1);
@@ -324,14 +299,12 @@ for i=1:num_rxns
     met_compartments_unique = unique(metCompartments);
     
     if (length(met_compartments_unique) == 1)
-       modeloutput.rxnComp{i,1} = cell2str(met_compartments_unique(1));
-    else
-       modeloutput.rxnComp{i,1} = 'c';
+       modeloutput.rxnComp{i} = cell2str(met_compartments_unique(1));
     end
 
-    [modeloutput,modeloutput.rxnMapResult{i,1}] = checkReactionBal(modeloutput,modeloutput.rxns(i),true);
+    [modeloutput,modeloutput.rxnMapResult{i}] = checkReactionBal(modeloutput,modeloutput.rxns(i),true);
     
-    if ~NotDrain || ~isempty(find(reactantDeltaGFstd > 0.9E+07)) || ~(length(reactants) < 100) || strcmp(modeloutput.rxnMapResult{i,1},'missing atoms') || strcmp(modeloutput.rxnMapResult{i,1},'drain flux')
+    if ~NotDrain || any(reactantDeltaGFstd > 0.9E+07) || length(reactants) >= 100 || strcmp(modeloutput.rxnMapResult{i},'missing atoms') || strcmp(modeloutput.rxnMapResult{i},'drain flux')
         
         if writeToFileFlag
             fprintf(OUTPUT,'rxn %i: %s thermo constraint NOT created\n',i,modeloutput.rxns{i});
@@ -340,60 +313,48 @@ for i=1:num_rxns
         if verboseFlag
             fprintf('rxn %i: %s thermo constraint NOT created\n',i,modeloutput.rxns{i});
         end
-        
-        modeloutput.rxnDeltaGR(i,1) = 1E+07;
-        modeloutput.rxnDeltaGRerr(i,1) = 1E+07;
-        modeloutput.rxnThermo(i) = 0;
+
     else
         if verboseFlag
             fprintf('rxn %i: %s thermo constraint created\n',i,modeloutput.rxns{i});
         end
         
         modeloutput.rxnThermo(i) = 1;
-        if (modeloutput.isTrans(i))
+        if modeloutput.isTrans(i)
             if isfield(model,'rxnSpecie')
                 if modeloutput.rxnSpecie(i)
-                    [rhs(i,1),breakdown] = calcDGtpt_RHS(reactantIDs,stoich,metCompartments,CompartmentData,ReactionDB,metSpecie,metCharge,reactantDeltaGFstd);
-                    rhs(i,1)=-1*rhs(i,1);
+                    rhs(i) = -calcDGtpt_RHS(reactantIDs,stoich,metCompartments,CompartmentData,ReactionDB,metSpecie,metCharge,reactantDeltaGFstd);
                 else
-                    [rhs(i,1),breakdown] = calcDGtpt_RHS(reactantIDs,stoich,metCompartments,CompartmentData,ReactionDB);
-                    rhs(i,1)=-1*rhs(i,1);
+                    rhs(i) = -calcDGtpt_RHS(reactantIDs,stoich,metCompartments,CompartmentData,ReactionDB);
                 end
             else
-                [rhs(i,1),breakdown] = calcDGtpt_RHS(reactantIDs,stoich,metCompartments,CompartmentData,ReactionDB);
-                rhs(i,1)=-1*rhs(i,1);
+                rhs(i) = -calcDGtpt_RHS(reactantIDs,stoich,metCompartments,CompartmentData,ReactionDB);
             end
-            
-            DeltaGrxn=breakdown.sum_DeltaGFis;
-            modeloutput.rxnDeltaGR(i,1) = -rhs(i,1);
+
+            modeloutput.rxnDeltaGR(i) = -rhs(i);
         else
-            rhs(i,1) =  0;
             for j=1:length(reactants)
 
-                metindex = find(ismember(modeloutput.mets,reactants{j,1}));
+                metindex = find(ismember(modeloutput.mets,reactants{j}));
                 
                 if (~strcmp(modeloutput.metFormulas{metindex},'H'))               
-                    DeltaGrxn = DeltaGrxn + stoich(j,1)*modeloutput.metDeltaGFtr(metindex,1);
-                    DeltaGRerr = DeltaGRerr + abs(stoich(j,1)*modeloutput.metDeltaGFerr(metindex,1));
+                    DeltaGrxn = DeltaGrxn + stoich(j)*modeloutput.metDeltaGFtr(metindex);
+                    DeltaGRerr = DeltaGRerr + abs(stoich(j)*modeloutput.metDeltaGFerr(metindex));
                 end
             end
-            modeloutput.rxnDeltaGR(i,1) = DeltaGrxn;
+            modeloutput.rxnDeltaGR(i) = DeltaGrxn;
         end
         
         % we can use the deltaGR based on the groups transformed
         % use groups transformed
-        if (useGroupChange)
-            [DeltaGrxn DeltaGRerr cues cue_error] = calcDGR_cues(reactantIDs,stoich,ReactionDB);
-        else
-            [tmp1 DeltaGRerr tmp2 tmp3] = calcDGR_cues(reactantIDs,stoich,ReactionDB);
-        end
+        [~,DeltaGRerr] = calcDGR_cues(reactantIDs,stoich,ReactionDB);
         
         if (DeltaGRerr == 0)
             DeltaGRerr = 2.22;% default value for DeltaGRerr. Check Jankowski 2008!
         end
         
         
-        modeloutput.rxnDeltaGRerr(i,1) = DeltaGRerr;
+        modeloutput.rxnDeltaGRerr(i) = DeltaGRerr;
         
     end
 end
