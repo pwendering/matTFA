@@ -15,14 +15,13 @@ end
 
 mets = model.mets(find(model.S(:,rxn_index)));
 metFormulas = model.metFormulas(find(model.S(:,rxn_index)));
-metCharges = model.metCharge(find(model.S(:,rxn_index)));
 stoich = model.S(find(model.S(:,rxn_index)),rxn_index);
 Ematrix = zeros(length(mets), 6);
 
 if length(mets) == 1    
     result = 'drain flux';
     
-elseif ~isempty(find(ismember(metFormulas,'NA')))
+elseif any(ismember(metFormulas,'NA'))
     result = 'missing structures';
     return
     
@@ -54,8 +53,8 @@ elseif length(mets) == length(stoich)
         for j = 1:length(tok) % go through each token.
             t = tok{1,j};
             comp = t{1,1};
-            q = str2num(t{1,2});
-            if (isempty(q))
+            q = str2double(t{1,2});
+            if isnan(q) || isempty(q)
                 q = 1;
             end
             
@@ -143,7 +142,7 @@ elseif length(mets) == length(stoich)
             end
             
             if isfield(model,'metCompSymbol')
-                proton_index = proton_met_index(find(ismember(model.metCompSymbol(proton_met_index),rxn_comp)));
+                proton_index = proton_met_index(ismember(model.metCompSymbol(proton_met_index),rxn_comp));
             else
                 fprintf('Cannot find compartment info\n');
             end
