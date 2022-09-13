@@ -16,7 +16,7 @@ end
 mets = model.mets(find(model.S(:,rxn_index)));
 metFormulas = model.metFormulas(find(model.S(:,rxn_index)));
 stoich = model.S(find(model.S(:,rxn_index)),rxn_index);
-Ematrix = zeros(length(mets), 6);
+Ematrix = zeros(length(mets), 27);
 
 if length(mets) == 1    
     result = 'drain flux';
@@ -59,62 +59,64 @@ elseif length(mets) == length(stoich)
             end
             
             switch comp
-            case 'C'
-                Ematrix(n,1) = q;
-            case 'N'
-                Ematrix(n,2) = q;
-            case 'O'
-                Ematrix(n,3) = q;
-            case 'H'
-                Ematrix(n,4) = q;
-            case 'P'
-                Ematrix(n,5) = q;
-            case 'Na'
-                Ematrix(n,6) = q;
-            case 'Mg'
-                Ematrix(n,7) = q;
-            case 'S'
-                Ematrix(n,8) = q;
-            case 'Cl'
-                Ematrix(n,9) = q;
-            case 'K'
-                Ematrix(n,10) = q;
-            case 'Ca'
-                Ematrix(n,11) = q;
-            case 'Mn'
-                Ematrix(n,12) = q;
-            case 'Fe'
-                Ematrix(n,13) = q;
-            case 'Ni'
-                Ematrix(n,14) = q;                
-            case 'Co'
-                Ematrix(n,15) = q;
-            case 'Cu'
-                Ematrix(n,16) = q;
-            case 'Zn'
-                Ematrix(n,17) = q;
-            case 'As'
-                Ematrix(n,18) = q;
-            case 'Se'
-                Ematrix(n,19) = q;
-            case 'Ag'
-                Ematrix(n,20) = q;
-            case 'Cd'
-                Ematrix(n,21) = q;
-            case 'W'
-                Ematrix(n,22) = q;
-            case 'Hg'
-                Ematrix(n,23) = q;
-            case 'R'
-                Ematrix(n,24) = q;
-            case 'Mo'
-                Ematrix(n,25) = q;
-            case 'X'
-                Ematrix(n,26) = q;
-            otherwise
-                display('Warning');
-                display(met_formula)
-                display(compounds);
+                case 'C'
+                    Ematrix(n,1) = q;
+                case 'N'
+                    Ematrix(n,2) = q;
+                case 'O'
+                    Ematrix(n,3) = q;
+                case 'H'
+                    Ematrix(n,4) = q;
+                case 'P'
+                    Ematrix(n,5) = q;
+                case 'Na'
+                    Ematrix(n,6) = q;
+                case 'Mg'
+                    Ematrix(n,7) = q;
+                case 'S'
+                    Ematrix(n,8) = q;
+                case 'Cl'
+                    Ematrix(n,9) = q;
+                case 'K'
+                    Ematrix(n,10) = q;
+                case 'F'
+                    Ematrix(n,11) = q;
+                case 'Ca'
+                    Ematrix(n,12) = q;
+                case 'Mn'
+                    Ematrix(n,13) = q;
+                case 'Fe'
+                    Ematrix(n,14) = q;
+                case 'Ni'
+                    Ematrix(n,15) = q;
+                case 'Co'
+                    Ematrix(n,16) = q;
+                case 'Cu'
+                    Ematrix(n,17) = q;
+                case 'Zn'
+                    Ematrix(n,18) = q;
+                case 'As'
+                    Ematrix(n,19) = q;
+                case 'Se'
+                    Ematrix(n,20) = q;
+                case 'Ag'
+                    Ematrix(n,21) = q;
+                case 'Cd'
+                    Ematrix(n,22) = q;
+                case 'W'
+                    Ematrix(n,23) = q;
+                case 'Hg'
+                    Ematrix(n,24) = q;
+                case 'R'
+                    Ematrix(n,25) = q;
+                case 'Mo'
+                    Ematrix(n,26) = q;
+                case 'X'
+                    Ematrix(n,27) = q;
+                otherwise
+                    display('Warning');
+                    display(met_formula)
+                    display(compounds);
             end
         end
     end
