@@ -1,14 +1,14 @@
 function model = addNetFluxVariables(model)
 % adds NetFluxes variables to the model and their associated constraints
 
-[num_mets num_rxns] = size(model.S);
+[~,num_rxns] = size(model.S);
 [num_constraints,org_num_vars] = size(model.A);
 
 % F_vi=getAllVar(model,{'F'});
 % R_vi=getAllVar(model,{'R'});
 
 model.A=[model.A zeros(num_constraints,num_rxns)];
-[num_constraints,num_vars] = size(model.A);
+[~,num_vars] = size(model.A);
 
 tmp_matrix=zeros(num_rxns,num_vars);
 

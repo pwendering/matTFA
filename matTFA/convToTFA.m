@@ -1,4 +1,7 @@
-function [model, relaxedDGoVarsValues, modelwDGoSlackVars] = convToTFA(model, ReactionDB, rxnNameListNoThermo, flagInfeasibility, rxnNameListNoDGoRelax, minObjSolVal, flagToAddPotentials, flagToAddLnThermoDisp, verboseFlag, printLP, flagMCA_FarEquilibrium)
+function [model, relaxedDGoVarsValues, modelwDGoSlackVars] = ...
+    convToTFA(model, ReactionDB, rxnNameListNoThermo, flagInfeasibility,...
+    rxnNameListNoDGoRelax, minObjSolVal, flagToAddPotentials,...
+    flagToAddLnThermoDisp, verboseFlag, printLP, flagMCA_FarEquilibrium, T)
 % converts a model into a TFA ready model by adding the
 % thermodynamic constraints required
 %
@@ -99,8 +102,12 @@ else
     DGR_lb = -bigMtherm; %kcal/mol
     DGR_ub =  bigMtherm; %kcal/mol
 end
-TEMPERATURE = 298.15; % K
-RT = GAS_CONSTANT*TEMPERATURE;
+if ~exist('T','var') || isempty(T)
+    T = 298.15; % K
+elseif ~isnumeric(T)
+    error('Temperature input is not numeric')
+end
+RT = GAS_CONSTANT*T;
 
 % value for the bigM in big M constraints such as:
 % UF_rxn: F_rxn - M*FU_rxn < 0
@@ -293,9 +300,9 @@ for i = 1:num_mets
     metLConc_ub = log(model.CompartmentData.compMaxConc(Comp_index));
     Comp_pH = model.CompartmentData.pH(Comp_index);
     
-    if strcmp(metformula,'H2O');
+    if strcmp(metformula,'H2O')
         model = addNewVariableInTFA(model, strcat('LC_',model.mets{i}),'C',[0 0]);
-    elseif strcmp(metformula,'H');
+    elseif strcmp(metformula,'H')
         model = addNewVariableInTFA(model, strcat('LC_',model.mets{i}),'C',[log(10^(-Comp_pH)) log(10^(-Comp_pH))]);
     elseif strcmp(model.metSEEDID{i},'cpd11416')
         % we do not create the thermo variables for biomass metabolite

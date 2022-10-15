@@ -1,4 +1,5 @@
-function modeloutput = prepModelforTFA(model, ReactionDB, CompartmentData, replaceData, verboseFlag, writeToFileFlag)
+function modeloutput = prepModelforTFA(model, ReactionDB, CompartmentData,...
+    replaceData, verboseFlag, writeToFileFlag, T)
 % prepares a COBRA toolbox model for TFBA analysis by doing the following:
 % - checks if a reaction is a transport reaction
 % - checks the ReactionDB for Gibbs energies of formation of metabolites
@@ -26,6 +27,9 @@ replaceMetNames = true;
 % default placeholder for null data for mets :
 DEFAULT_NULL = 'NA';
 
+% define reference tempeature
+T_REF = 298.15; % K
+
 if ~exist('replaceData','var') || isempty(replaceData)
     replaceData = false;
 end
@@ -36,6 +40,10 @@ end
 
 if ~exist('writeToFileFlag','var') || isempty(writeToFileFlag)
     writeToFileFlag = true;
+end
+
+if ~exist('T','var') || isempty(T)
+    T = T_REF;
 end
 
 if writeToFileFlag
@@ -49,13 +57,6 @@ if isfield(model,'thermo_units')
 else
     model.thermo_units = ReactionDB.thermo_units;
 end
-
-if strcmp(ReactionDB.thermo_units,'kJ/mol')
-    GAS_CONSTANT = 8.314472/1000; % kJ/(K mol)
-else
-    GAS_CONSTANT = 1.9858775/1000; % Kcal/(K mol)
-end
-TEMPERATURE = 298.15; % K
 
 if issparse(model.S)
     model.S=full(model.S);
@@ -86,8 +87,6 @@ end
 
 % add compartment information if it does not exist
 % or if we can get the compartment info from the met names
-% PW: modeloutput is overwritten after this if statement, so the following
-% step could just be excluded
 if noMetCompartment
     disp(['WARNING:metabolite compartment info missing! ', ...
             'Attempting to get it from met']);
@@ -119,7 +118,9 @@ elseif isfield(model,'metCompartment')
 end
 
 disp('Checking for transport reactions');
-modeloutput = checkTransport(model);
+tmp = checkTransport(model);
+modeloutput.isTrans = tmp.isTrans;
+clear tmp
 
 % check that the metabolites has been identified to compound IDs
 if ~isfield(model,'metSEEDID')
@@ -146,9 +147,9 @@ for i=1:num_mets
             fprintf('matching %i = %s\n',i,model.mets{i});
        end
 
-       cpdIndex = find(ismember(ReactionDB.compound.ID,model.metSEEDID(i)));
-       compIndex = find(ismember(CompartmentData.compSymbolList,...
-                                modeloutput.metCompSymbol(i)));
+       cpdIndex = ismember(ReactionDB.compound.ID,model.metSEEDID(i));
+       compIndex = ismember(CompartmentData.compSymbolList,...
+                                modeloutput.metCompSymbol(i));
        comp_pH = CompartmentData.pH(compIndex);
        comp_ionicStr = CompartmentData.ionicStr(compIndex);
 
@@ -157,7 +158,7 @@ for i=1:num_mets
            model.metNames{i} = ReactionDB.compound.metNames(cpdIndex);
        end
 
-       if isempty(cpdIndex)
+       if ~any(cpdIndex)
 
            if verboseFlag
                 fprintf('%s : %s not found in ReactionDB\n', ...
@@ -192,6 +193,8 @@ for i=1:num_mets
                ReactionDB.compound.deltaGf_std(cpdIndex);
            modeloutput.metDeltaGFerr(i) = ...
                ReactionDB.compound.deltaGf_err(cpdIndex);
+           modeloutput.metDeltaSstd(i) = ...
+               ReactionDB.compound.deltaSf_std(cpdIndex);
            modeloutput.metCharge(i) = ...
                ReactionDB.compound.Charge_std(cpdIndex);
            modeloutput.metFormulas{i} = ...
@@ -203,7 +206,8 @@ for i=1:num_mets
                         comp_pH,...
                         comp_ionicStr,...
                         'GCM',...
-                        ReactionDB);
+                        ReactionDB,...
+                        T);
            modeloutput.struct_cues{i} =...
                     ReactionDB.compound.struct_cues{cpdIndex};
 
@@ -212,8 +216,8 @@ for i=1:num_mets
                    model.mets{i},...
                    comp_pH,...
                    comp_ionicStr,...
-                   modeloutput.metDeltaGFstd(i,1),...
-                   modeloutput.metDeltaGFtr(i,1));
+                   modeloutput.metDeltaGFstd(i),...
+                   modeloutput.metDeltaGFtr(i));
            end
        end
    else
@@ -275,6 +279,7 @@ for i=1:num_rxns
     
     % identifying the reactants
     DeltaGrxn = 0;
+    DeltaSrxn = 0;
     DeltaGRerr = 0;
     met_indices=find(modeloutput.S(:,i));
     stoich = modeloutput.S(met_indices,i);
@@ -323,12 +328,15 @@ for i=1:num_rxns
         if modeloutput.isTrans(i)
             if isfield(model,'rxnSpecie')
                 if modeloutput.rxnSpecie(i)
-                    rhs(i) = -calcDGtpt_RHS(reactantIDs,stoich,metCompartments,CompartmentData,ReactionDB,metSpecie,metCharge,reactantDeltaGFstd);
+                    rhs(i) = -calcDGtpt_RHS(reactantIDs,stoich,metCompartments,...
+                        CompartmentData,ReactionDB,metSpecie,metCharge,reactantDeltaGFstd,T);
                 else
-                    rhs(i) = -calcDGtpt_RHS(reactantIDs,stoich,metCompartments,CompartmentData,ReactionDB);
+                    rhs(i) = -calcDGtpt_RHS(reactantIDs,stoich,metCompartments,...
+                        CompartmentData,ReactionDB,[],[],[],T);
                 end
             else
-                rhs(i) = -calcDGtpt_RHS(reactantIDs,stoich,metCompartments,CompartmentData,ReactionDB);
+                rhs(i) = -calcDGtpt_RHS(reactantIDs,stoich,metCompartments,...
+                    CompartmentData,ReactionDB,[],[],[],T);
             end
 
             modeloutput.rxnDeltaGR(i) = -rhs(i);
@@ -337,14 +345,24 @@ for i=1:num_rxns
 
                 metindex = find(ismember(modeloutput.mets,reactants{j}));
                 
-                if (~strcmp(modeloutput.metFormulas{metindex},'H'))               
+                if ~strcmp(modeloutput.metFormulas{metindex},'H')               
                     DeltaGrxn = DeltaGrxn + stoich(j)*modeloutput.metDeltaGFtr(metindex);
                     DeltaGRerr = DeltaGRerr + abs(stoich(j)*modeloutput.metDeltaGFerr(metindex));
+                    
+                    DeltaSrxn = DeltaSrxn + stoich(j)*modeloutput.metDeltaSstd(metindex);
                 end
             end
-            modeloutput.rxnDeltaGR(i) = DeltaGrxn;
+            
+            % adjust Gibbs free energy difference to temperature using
+            % formula proposed by Du et al. 2018 (DOI:10.1016/j.bpj.2018.04.030)
+            if ~isnan(DeltaSrxn)
+                modeloutput.rxnDeltaGR(i) = DeltaGrxn - (T - T_REF) * DeltaSrxn;
+            else
+                modeloutput.rxnDeltaGR(i) = DeltaGrxn;
+            end
+
         end
-        
+
         % we can use the deltaGR based on the groups transformed
         % use groups transformed
         [~,DeltaGRerr] = calcDGR_cues(reactantIDs,stoich,ReactionDB);
@@ -352,7 +370,6 @@ for i=1:num_rxns
         if (DeltaGRerr == 0)
             DeltaGRerr = 2.22;% default value for DeltaGRerr. Check Jankowski 2008!
         end
-        
         
         modeloutput.rxnDeltaGRerr(i) = DeltaGRerr;
         

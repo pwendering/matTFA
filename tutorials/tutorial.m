@@ -75,11 +75,13 @@ while ~isempty(id_Blocked_in_FBA)
 end
 
 %% Prepare for TFA
+T = 298.15;
 %need field for description
-prepped_m = prepModelforTFA(mymodel, ReactionDB, mymodel.CompartmentData);
+prepped_m = prepModelforTFA(mymodel, ReactionDB, mymodel.CompartmentData,...
+    [],[],[],T);
 
 %% Convert to TFA
-tmp = convToTFA(prepped_m, ReactionDB, [], 'DGo', [], min_obj);
+tmp = convToTFA(prepped_m, ReactionDB, [], 'DGo', [], min_obj,[],[],[],[],[],T);
 
 % Add net flux variables, which are equal to forwards flux - backwards flux
 % NF_rxn = F_rxn - B_rxn

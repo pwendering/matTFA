@@ -1,4 +1,4 @@
-function [deltaGF deltaGF_err cues] = calcDGF_cues(cueString,ReactionDB)
+function [deltaGF,deltaGF_err,cues] = calcDGF_cues(cueString,ReactionDB)
 % calculates the deltaG formation and error of the compound using its
 % constituent structural cues
 
@@ -9,11 +9,11 @@ cues = zeros(length(ReactionDB.cue.ID),1);
 % split the cueString into the cues and their 
 % cue data, i.e. cue_name:num should be separated by either | or ;
 
-if ~isempty(regexp(cueString,'\|'))
+if any(contains(cueString,'|'))
     myCues = strsplit(cueString,'|');
-elseif ~isempty(regexp(cueString,';'))
+elseif any(contains(cueString,';'))
     myCues = strsplit(cueString,';');
-elseif length(regexp(cueString,':')) == 1
+elseif sum(contains(cueString,':')) == 1
     myCues{1} = cueString;
 else
     fprintf('wrongly formatted cue data\n');
@@ -28,11 +28,11 @@ for i=1:length(myCues)
         cueIndex = find(ismember(ReactionDB.cue.ID,cueData{1}));
 
         if (cueIndex)
-            cues(cueIndex) = str2num(cueData{2});
+            cues(cueIndex) = str2double(cueData{2});
             deltaG_cue = ReactionDB.cue.Energy{cueIndex,1};
             deltaGerr_cue = ReactionDB.cue.Error{cueIndex,1};
-            deltaGF = deltaGF + str2num(cueData{2})*deltaG_cue;
-            deltaGF_err = deltaGF_err + (str2num(cueData{2})*deltaGerr_cue)^2;
+            deltaGF = deltaGF + str2double(cueData{2})*deltaG_cue;
+            deltaGF_err = deltaGF_err + (str2double(cueData{2})*deltaGerr_cue)^2;
         else
             fprintf('cue %s not found\n',cueData{1});
         end
@@ -41,3 +41,4 @@ for i=1:length(myCues)
 end
 
 deltaGF_err = sqrt(deltaGF_err);
+end

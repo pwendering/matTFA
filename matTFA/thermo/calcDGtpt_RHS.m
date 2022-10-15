@@ -1,4 +1,5 @@
-function [DG_trans_RHS,breakdown] = calcDGtpt_RHS(metabolites,stoich,metCompartment,CompartmentData,ReactionDB,metSpecie,metCharge,metDeltaGFtr)
+function [DG_trans_RHS,breakdown] = calcDGtpt_RHS(metabolites,stoich,...
+    metCompartment,CompartmentData,ReactionDB,metSpecie,metCharge,metDeltaGFtr,T)
 % calculates the RHS of the deltaG constraint, i.e. the sum of the 
 % non-concentration terms
 % INPUTS
@@ -32,14 +33,19 @@ else
     GAS_CONSTANT = 1.9858775/1000; % kcal/mol
     Faraday_const = 23.061; % kcal/eV
 end
-TEMPERATURE = 298.15; % K
-RT = GAS_CONSTANT*TEMPERATURE;
 
-trans_compound = {};
+if ~exist('T','var') || isempty(T)
+    T = 298.15; % K
+end
+
+RT = GAS_CONSTANT*T;
+
 in_comp = {};
 out_comp = {};
-trans_stoich = [];
 
+deltaGf_react = nan(numel(metabolites),1);
+met_nH = nan(numel(metabolites),1);
+charge = nan(numel(metabolites),1);
 for i=1:length(metabolites)
    compIndex = find(ismember(CompartmentData.compSymbolList,metCompartment(i)));
    comp_pH = CompartmentData.pH(compIndex);
@@ -49,41 +55,35 @@ for i=1:length(metabolites)
    charge(i) = ReactionDB.compound.Charge_std(compIndex);
 end
 
-% get the reactants
-reactants = metabolites(find(stoich < 0));
-reactantIndices = find(stoich < 0);
-% get the products
-products = metabolites(find(stoich > 0));
-productIndices = find(stoich > 0);
-
-sum_deltaG_trans = 0;
 sum_stoich_NH = 0;
-chem_stoich = stoich;
 sum_DeltaGFis_trans = 0;
 RT_sum_H_LC_tpt = 0; % to include the differential proton concentration effects if protons are transported
 
-[trans_compound trans_stoich] = findTransportedMet(metabolites,stoich,metCompartment);
+[trans_compound,trans_stoich] = findTransportedMet(metabolites,stoich,metCompartment);
 
-if (length(find(deltaGf_react > 1E6)) == 0)
+if ~any(deltaGf_react > 1E6)
     for i=1:length(trans_compound)
-        met_indices = find(ismember(metabolites,trans_compound{i})); % get the pair of indices of the transported compound
+        % get the pair of indices of the transported compound
+        met_indices = find(ismember(metabolites,trans_compound{i}));
 
         for j=1:length(met_indices)
-            met_index = met_indices(j); % get the exact index
+            % get the exact index
+            met_index = met_indices(j);
 
             if ~isempty(met_index) && ~(strcmp(trans_compound{i},'cpd00001'))
                 met_comp_index = find(ismember(CompartmentData.compSymbolList,metCompartment{met_index}));
                 pH_comp = CompartmentData.pH(met_comp_index);
                 ionicStr_comp = CompartmentData.ionicStr(met_comp_index);
 
-                if nargin == 8 %% for the case where we want to calculate the exact species transported
+                if exist('metDeltaGFtr','var') && ~isempty(metDeltaGFtr)
+                    % for the case where we want to calculate the exact species transported
                     deltaGfsp = metDeltaGFtr(met_index);
                 else
-                    deltaGfsp = calcDGis(trans_compound{i},pH_comp,ionicStr_comp,'GCM',ReactionDB); %calcDGsp(trans_compound{i},1,pH_comp,ionicStr_comp,'GCM',ReactionDB);
+                    deltaGfsp = calcDGis(trans_compound{i},pH_comp,ionicStr_comp,'GCM',ReactionDB);
                 end
                 
-                %trans_stoich is always positive
-                if (stoich(met_index) < 0)
+                % trans_stoich is always positive
+                if stoich(met_index) < 0
                     out_comp(length(out_comp)+1) = metCompartment(met_index);
                     sum_stoich_NH = sum_stoich_NH - trans_stoich(i)*met_nH(met_index)*RT*log(10^(-pH_comp));
                     sum_DeltaGFis_trans = sum_DeltaGFis_trans - trans_stoich(i)*deltaGfsp;      
@@ -106,7 +106,6 @@ if (length(find(deltaGf_react > 1E6)) == 0)
             if ~isempty(met_index) && (strcmp(trans_compound{i},'cpd00067'))
                 met_comp_index = find(ismember(CompartmentData.compSymbolList,metCompartment{met_index}));
                 pH_comp = CompartmentData.pH(met_comp_index);
-                ionicStr_comp = CompartmentData.ionicStr(met_comp_index);
 
                 if (stoich(met_index) < 0)
                     RT_sum_H_LC_tpt = RT_sum_H_LC_tpt - RT*trans_stoich(i)*log(10^(-pH_comp));
@@ -125,7 +124,7 @@ if (length(find(deltaGf_react > 1E6)) == 0)
     sum_F_memP_charge = 0;
 
     for i=1:length(trans_compound)
-        if nargin == 8
+        if exist('metDeltaGFtr','var') && ~isempty(metDeltaGFtr)
             if (~strcmp(trans_compound{i},'cpd00001'))
                 in_comp_index = find(ismember(CompartmentData.compSymbolList,in_comp(i)));
                 out_comp_index = find(ismember(CompartmentData.compSymbolList,out_comp(i)));
@@ -166,10 +165,10 @@ if (length(find(deltaGf_react > 1E6)) == 0)
     % lastly we calculate the deltaG of the chemical reaction if any
     % but we do not add this part to the rhs as it would be included in the
     % potential energy of the metabolite
-    for i=1:length(trans_compound);
+    for i=1:length(trans_compound)
         tptMet_indices = find(ismember(metabolites,trans_compound{i}));
 
-        for j=1:length(tptMet_indices);
+        for j=1:length(tptMet_indices)
 
             if (stoich(tptMet_indices(j)) < 0)
                 stoich(tptMet_indices(j)) = stoich(tptMet_indices(j)) + trans_stoich(i);
@@ -179,7 +178,7 @@ if (length(find(deltaGf_react > 1E6)) == 0)
         end
     end
 
-    if ~isempty(find(stoich))
+    if any(stoich)
         for i=1:length(stoich)
             if ~strcmp(metabolites{i},'cpd00067')
                 comp_index = find(ismember(CompartmentData.compSymbolList,metCompartment{i}));
@@ -213,4 +212,5 @@ if (length(find(deltaGf_react > 1E6)) == 0)
     
 else
     DG_trans_RHS = 0;
+end
 end

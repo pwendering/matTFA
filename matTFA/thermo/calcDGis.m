@@ -1,4 +1,4 @@
-function deltaGfis = calcDGis(name,pH,ionicStr,dataset,ReactionDB)
+function deltaGfis = calcDGis(name,pH,ionicStr,dataset,ReactionDB,T)
 % calculate the transformed Gibbs energy of formation of specie with given
 % pH and ionic strength using formula given by Goldberg and Tewari, 1991
 % equation 4.5-1 in Alberty's book doesn't work in MATLAB due to large
@@ -10,8 +10,11 @@ if strcmp(ReactionDB.thermo_units,'kJ/mol')
 else
     GAS_CONSTANT = 1.9858775/1000; % Kcal/(K mol)
 end
-TEMPERATURE = 298.15; % K
-RT = GAS_CONSTANT*TEMPERATURE;
+
+if ~exist('T','var') || isempty(T)
+    T = 298.15; % K
+end
+RT = GAS_CONSTANT*T;
 
 global data;
 
@@ -20,15 +23,12 @@ I = ionicStr;
 if strcmp(dataset,'Alberty')
 
     evalc(strcat('specie = data.',name,'sp'));
-    sumOfSpecies = 0;
-
-    P = calcP(name,1,pH,I,dataset)
+    
+    P = calcP(name,1,pH,I,dataset);
 
     deltaGfis = calcDGsp(name,1,pH,I,'Alberty') - RT*log(P);
 
 elseif strcmp(dataset,'GCM')
-    
-    sumOfSpecies = 0;
 
     ind = getIndex(ReactionDB.compound.ID,name);
     

@@ -129,6 +129,7 @@ if isempty(solTFA.x) || solTFA.val<minObjSolVal
     rxnNamesToBeRelaxed = regexprep(DGoSlackVars, '(^DGNegSlack_)|(^DGPosSlack_)', '');
     id_rxnNamesToBeRelaxed = find_cell(rxnNamesToBeRelaxed, model.rxns);
     
+    model.rxnDeltaGRerr_updated = model.rxnDeltaGRerr;
     for i = 1:size(rxnNamesToBeRelaxed,1)
         
         % Get the name of the i-th DG-naught variable that needs to be relaxed
@@ -155,6 +156,8 @@ if isempty(solTFA.x) || solTFA.val<minObjSolVal
         fprintf('Relaxation of %s : %0.3f +- %0.3f (sigma) ---> %0.3f +- %d*%0.3f \n', varNameToBeRelaxed, DGo_RxnToBeRelaxed_i, DGoError_RxnToBeRelaxed_i, DGo_RxnToBeRelaxed_i, relax_XSigmas, DGoError_RxnToBeRelaxed_i)
         refRangeAndRelaxedRange = [DGo_RxnToBeRelaxed_i + DGoError_RxnToBeRelaxed_i*[- 1 1] DGo_RxnToBeRelaxed_i + relax_XSigmas*DGoError_RxnToBeRelaxed_i*[- 1 1]];
         relaxedDGoVarsValues = [relaxedDGoVarsValues; [varNameToBeRelaxed num2cell(refRangeAndRelaxedRange)]];
+        % save updated DGo error
+        model.rxnDeltaGRerr_updated(id_rxnNamesToBeRelaxed(i)) = relax_XSigmas*DGoError_RxnToBeRelaxed_i;
     end
     
     fprintf('It was not possible to obtain TFA-feasible solutions with the original DGo values calculated by GCM!\n')
