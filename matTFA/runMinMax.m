@@ -45,11 +45,15 @@ if runParallel
 else
     for i = 1:length(rxn_id)
         
-        if verbose && ~isfield(model,'CS_varNames')
-            fprintf('minmax for %s\t',model.rxns{rxn_id(i)});
+        if ~isfield(model,'CS_varNames')
+            if verbose
+                fprintf('minmax for %s\t',model.rxns{rxn_id(i)})
+            end
             model = changeObjective(model,model.rxns{rxn_id(i)});
         elseif verbose && isfield(model,'CS_varNames')
-            fprintf('minmax for %s\t',model.CS_varNames{rxn_id(i)});
+            if verbose
+                fprintf('minmax for %s\t',model.CS_varNames{rxn_id(i)})
+            end
             model.c = zeros(size(model.S,2),1);
             model.c(rxn_id(i)) = 1;
         end
