@@ -106,8 +106,8 @@ else
         cplex.Param.threads.Cur = 1;
         
         %%%% --- Minimization --- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        fprintf(repmat('\b',1,NCharsToDel))                   %
-        fprintf('Minimizing %s\n',tModel.varNames{i});        %
+ %       fprintf(repmat('\b',1,NCharsToDel))                   %
+ %       fprintf('Minimizing %s\n',tModel.varNames{i});        %
         cplex.Model.sense = 'minimize';                       %
         cplexSol = cplex.solve();                             %
         solval = cplexSol.objval;                             %
@@ -120,8 +120,8 @@ else
         strToDel = ['Minimizing  ',tModel.varNames{i}];
         NCharsToDel = size(strToDel,2);
         %%%% --- Maximization --- %%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        fprintf(repmat('\b',1,NCharsToDel))                   %
-        fprintf('Maximizing %s\n',tModel.varNames{i});        %
+%        fprintf(repmat('\b',1,NCharsToDel))                   %
+%        fprintf('Maximizing %s\n',tModel.varNames{i});        %
         cplex.Model.sense = 'maximize';                       %
         cplexSol = cplex.solve();                             %
         solval = cplexSol.objval;                             %
