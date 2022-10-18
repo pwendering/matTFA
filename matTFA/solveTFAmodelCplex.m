@@ -83,6 +83,8 @@ end
 
 % Convert problem to cplex
 cplex = changeToCPLEX_WithOptions(tModel,TimeInSec,manualScalingFactor,mipTolInt,emphPar,feasTol,scalPar,mipDisplay,CPXPARAMdisp);
+% restrict solver to single thread
+cplex.Param.threads.Cur = 1;
 
 % Optimize the problem
 try
@@ -103,7 +105,7 @@ try
     else
         sol.x = [];
         sol.val = [];
-        disp('No field cplex.Solution.x');
+	fprintf('No field cplex.Solution.x; Solver status: %s\n', cplex.Solution.statusstring);
         warning('The solver does not return a solution!')
         sol.cplexSolStatus = 'No field cplex.Solution.x';
     end
