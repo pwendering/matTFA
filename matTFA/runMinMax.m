@@ -37,6 +37,7 @@ if runParallel
         restoreEnvironment(environment);
         changeCobraSolver(solver, 'LP', 0, -1);
         tmp_model = model;
+	tmp_model = changeObjective(tmp_model, tmp_model.rxns{rxn_id(i)});
         sol1 = solveFBAmodelCplex(tmp_model, scalPar, feasTol, emphPar, 'min');
         sol2 = solveFBAmodelCplex(tmp_model, scalPar, feasTol, emphPar, 'max');
         minmax(i,:) = [sol1.f sol2.f];
