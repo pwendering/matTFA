@@ -50,7 +50,7 @@ else
                 fprintf('minmax for %s\t',model.rxns{rxn_id(i)})
             end
             model = changeObjective(model,model.rxns{rxn_id(i)});
-        elseif verbose && isfield(model,'CS_varNames')
+        elseif isfield(model,'CS_varNames')
             if verbose
                 fprintf('minmax for %s\t',model.CS_varNames{rxn_id(i)})
             end
