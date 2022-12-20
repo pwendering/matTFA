@@ -364,7 +364,7 @@ for i = 1:num_rxns;
     %     - not a drain reaction (e.g. ' A <=> ')
     %     - not a protein draw reaction (GECKO ecmodel)
     %     - not an arm reaction (GECKO ecmodel)
-    if (model.rxnThermo(i) == 1) && (~H2OtRxns) && (~isDrain) && ~startsWith(model.rxns{i}, {'draw_prot_', 'arm_'})
+    if (model.rxnThermo(i) == 1) && (~H2OtRxns) && (~isDrain)
         % Then we will add thermodynamic constraints
         
         % We need to exclude protons and for water we can put the deltaGf in
