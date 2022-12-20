@@ -21,8 +21,7 @@ function sol = solveTFAmodelCplex(tModel,TimeInSec,manualScalingFactor,mipTolInt
 % something. If not, default to CPLEX using Fengos's code.
 % In the long run, we should rename thins function to remove CPLEX from its
 % name.
-% TODO : Add parameter setting in gurobi call
-%
+
 global TFA_MILP_SOLVER
 
 if ~exist('TFA_MILP_SOLVER','var') || isempty(TFA_MILP_SOLVER)
@@ -119,6 +118,137 @@ end
 %% Private function for GUROBI solve
 function sol = x_solveGurobi(tModel,TimeInSec,manualScalingFactor,mipTolInt,emphPar,feasTol,scalPar,mipDisplay)
     
+    if ~exist('manualScalingFactor','var') || isempty(manualScalingFactor)
+        % Do not scale the problem manually
+    else
+        tModel.A = manualScalingFactor*tModel.A;
+        tModel.rhs = manualScalingFactor*tModel.rhs;
+    end
+
+    % set gurobi parameters
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % TimeLimit
+    % Limits the total time expended (in seconds). Optimization returns 
+    % with a TIME_LIMIT status if the limit is exceeded.
+    % Type:             double
+    % Default value:    Infinity
+    % Minimum value:    0
+    % Maximum value:    Infinity
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    if ~exist('TimeInSec','var') || isempty(TimeInSec)
+        % LCSB default
+        TimeInSec = 1e75;
+    else
+        if TimeInSec < 0 || TimeInSec > 1e+75
+            error('Parameter value out of range!')
+        end
+    end
+    params.TimeLimit = TimeInSec;
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % FeasibilityTol: Primal feasibility tolerance
+    % All constraints must be satisfied to a tolerance of FeasibilityTol.
+    % Tightening this tolerance can produce smaller constraint violations, 
+    % but for numerically challenging models it can sometimes lead to much 
+    % larger iteration counts.
+    % Type:             double
+    % Default value:    1e-6
+    % Minimum value:    1e-9
+    % Maximum value:    1e-2
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    if ~exist('feasTol','var') || isempty(feasTol)
+        % LCSB default
+        feasTol = 1e-9;
+    else
+        if feasTol < 1e-9 || feasTol > 1e-2
+            error('Parameter value out of range!')
+        end
+    end
+    params.FeasibilityTol = feasTol;
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % OutputFlag: Controls Gurobi output
+    % Enables or disables solver output.
+    % Type:             int
+    % Default value:    1
+    % Minimum value:    0
+    % Maximum value:    1
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    if ~exist('mipDisplay','var') || isempty(mipDisplay)
+        mipDisplay = 0;
+    else
+        if ~ismember(mipDisplay,[0 1])
+            error('Parameter value out of range!')
+        end
+    end
+    params.OutputFlag = mipDisplay;
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % IntFeasTol: Integer feasibility tolerance
+    % An integrality restriction on a variable is considered satisfied when
+    % the variable’s value is less than IntFeasTol from the nearest integer
+    % value. Tightening this tolerance can produce smaller integrality 
+    % violations, but very tight tolerances may significantly increase
+    % runtime. Loosening this tolerance rarely reduces runtime.
+    % Type:             double
+    % Default value:    1e-5
+    % Minimum value:    1e-9
+    % Maximum value:    1e-1
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    if ~exist('mipTolInt','var') || isempty(mipTolInt)
+        mipTolInt = 1e-9;
+    else
+        if mipTolInt > 0.1 || mipTolInt < 0
+            error('Parameter value out of range!')
+        end
+    end
+    params.IntFeasTol = mipTolInt;
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % NumericFocus: Numerical focus
+    % The NumericFocus parameter controls the degree to which the code 
+    % attempts to detect and manage numerical issues.
+    % The default setting (0) makes an automatic choice, with a slight 
+    % preference for speed.
+    % Settings 1-3 increasingly shift the focus towards being more careful 
+    % in numerical computations. With higher values, the code will spend 
+    % more time checking the numerical accuracy of intermediate results,
+    % and it will employ more expensive techniques in order to avoid 
+    % potential numerical issues.
+    % Type:             int
+    % Default value:    0
+    % Minimum value:    0
+    % Maximum value:    3
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    if ~exist('emphPar','var') || isempty(emphPar)
+        emphPar = 2;
+    else
+        if ~ismember(emphPar,0:3)
+            error('Parameter value out of range!')
+        end
+    end
+    params.NumericFocus = emphPar;
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    % ScaleFlag: Model scaling
+    % Controls model scaling. By default, the rows and columns of the model
+    % are scaled in order to improve the numerical properties of the 
+    % constraint matrix. The scaling is removed before the final solution 
+    % is returned. Scaling typically reduces solution times, but it may 
+    % lead to larger constraint violations in the original, unscaled model.
+    % Turning off scaling (ScaleFlag=0) can sometimes produce smaller 
+    % constraint violations. Choosing a different scaling option can 
+    % sometimes improve performance for particularly numerically difficult 
+    % models.
+    % Type:             int
+    % Default value:    -1
+    % Minimum value:    -1
+    % Maximum value:    3
+    %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+    if ~exist('scalPar','var') || isempty(scalPar)
+        scalPar = -1;
+    else
+        if ~ismember(scalPar, -1:3)
+            error('Parameter value out of range!')
+        end
+    end
+    params.ScaleFlag = scalPar;
+    
     num_constr = length(tModel.constraintType);
     num_vars = length(tModel.vartypes);
 
@@ -134,8 +264,6 @@ function sol = x_solveGurobi(tModel,TimeInSec,manualScalingFactor,mipTolInt,emph
         vtypes = strcat(vtypes,tModel.vartypes{i,1});
     end
     
-    % TODO: Add Solver settings
-    
     gmodel.A=tModel.A;
     gmodel.obj=tModel.f;
     gmodel.lb=tModel.var_lb;
@@ -147,16 +275,16 @@ function sol = x_solveGurobi(tModel,TimeInSec,manualScalingFactor,mipTolInt,emph
     gmodel.varnames=tModel.varNames;
     
     if tModel.objtype==-1
-      gmodel.modelsense='max'
+      gmodel.modelsense='max';
     elseif tModel.objtype==1
-        gmodel.modelsense='min'
+        gmodel.modelsense='min';
     else
         error(['No objective type specified ' ...
             '(model.objtype should be in {-1,1})']);
     end
     
     try
-        result=gurobi(gmodel);
+        result=gurobi(gmodel, params);
         if isfield(result,'x')
             x = result.x;
             x(find(abs(x) < 1E-9))=0;
