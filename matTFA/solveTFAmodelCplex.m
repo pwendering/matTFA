@@ -21,8 +21,7 @@ function sol = solveTFAmodelCplex(tModel,TimeInSec,manualScalingFactor,mipTolInt
 % something. If not, default to CPLEX using Fengos's code.
 % In the long run, we should rename thins function to remove CPLEX from its
 % name.
-% TODO : Add parameter setting in gurobi call
-%
+
 global TFA_MILP_SOLVER
 
 if ~exist('TFA_MILP_SOLVER','var') || isempty(TFA_MILP_SOLVER)
@@ -264,8 +263,6 @@ function sol = x_solveGurobi(tModel,TimeInSec,manualScalingFactor,mipTolInt,emph
     for i=1:num_vars
         vtypes = strcat(vtypes,tModel.vartypes{i,1});
     end
-    
-    % TODO: Add Solver settings
     
     gmodel.A=tModel.A;
     gmodel.obj=tModel.f;
