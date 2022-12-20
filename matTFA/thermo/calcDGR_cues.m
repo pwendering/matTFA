@@ -18,7 +18,9 @@ for i=1:length(reactantIDs)
        reactant_cues = 'NA';
    end
    
-   if ~strcmp(reactant_cues,'NA') && ~isempty(reactant_cues) && ~isempty(compoundIndex)
+   if strcmp(reactant_cues,'PROTEIN')
+       continue
+   elseif ~strcmp(reactant_cues,'NA') && ~isempty(reactant_cues) && ~isempty(compoundIndex)
        [~,~,cpd_cues] = calcDGF_cues(reactant_cues,ReactionDB);
    else
        deltaGR = 1E+07;
