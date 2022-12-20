@@ -217,7 +217,7 @@ function sol = x_solveGurobi(tModel,TimeInSec,manualScalingFactor,mipTolInt,emph
     % Maximum value:    3
     %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
     if ~exist('emphPar','var') || isempty(emphPar)
-        emphPar = 2;
+        emphPar = 3;
     else
         if ~ismember(emphPar,0:3)
             error('Parameter value out of range!')
