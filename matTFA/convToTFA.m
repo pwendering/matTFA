@@ -306,8 +306,10 @@ for i = 1:num_mets
         model = addNewVariableInTFA(model, strcat('LC_',model.mets{i}),'C',[log(10^(-Comp_pH)) log(10^(-Comp_pH))]);
     elseif strcmp(model.metSEEDID{i},'cpd11416')
         % we do not create the thermo variables for biomass metabolite
-        
-        
+%     elseif startsWith(model.mets{i},{'prot_', 'pmet_'})
+%         % add dummy variable for proteins so thermo constraints can be
+%         % generated
+%         model = addNewVariableInTFA(model, strcat('LC_',model.mets{i}),'C',[0 0]);
     elseif  (metDeltaGF < 1E6)
         if verboseFlag
             fprintf('generating thermo variables for %s\n',model.mets{i});
@@ -360,7 +362,9 @@ for i = 1:num_rxns;
     %     - flagged with 1 in the field 'model.rxnThermo' (generated in prepModelForTFA)
     %     - not a H2O transport
     %     - not a drain reaction (e.g. ' A <=> ')
-    if (model.rxnThermo(i) == 1) && (~H2OtRxns) && (~isDrain)
+    %     - not a protein draw reaction (GECKO ecmodel)
+    %     - not an arm reaction (GECKO ecmodel)
+    if (model.rxnThermo(i) == 1) && (~H2OtRxns) && (~isDrain) && ~startsWith(model.rxns{i}, {'draw_prot_', 'arm_'})
         % Then we will add thermodynamic constraints
         
         % We need to exclude protons and for water we can put the deltaGf in
