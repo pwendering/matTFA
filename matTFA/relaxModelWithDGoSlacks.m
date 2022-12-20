@@ -151,8 +151,8 @@ if isempty(solTFA.x) || solTFA.val<minObjSolVal
         % Express the relaxation in terms of multiples of sigmas (standard deviation "error" of the DGo estimation):
         relax_XSigmas = 1 + ceil(abs(DGoSlackValue_i/DGoError_RxnToBeRelaxed_i));
         % Relax the values of the corresponding DGo:
-        modelwDGoSlackVars.var_lb(find_cell(varNameToBeRelaxed, modelwDGoSlackVars.varNames)) = DGo_RxnToBeRelaxed_i - relax_XSigmas * DGoError_RxnToBeRelaxed_i;
-        modelwDGoSlackVars.var_ub(find_cell(varNameToBeRelaxed, modelwDGoSlackVars.varNames)) = DGo_RxnToBeRelaxed_i + relax_XSigmas * DGoError_RxnToBeRelaxed_i;
+        %modelwDGoSlackVars.var_lb(find_cell(varNameToBeRelaxed, modelwDGoSlackVars.varNames)) = DGo_RxnToBeRelaxed_i - relax_XSigmas * DGoError_RxnToBeRelaxed_i;
+        %modelwDGoSlackVars.var_ub(find_cell(varNameToBeRelaxed, modelwDGoSlackVars.varNames)) = DGo_RxnToBeRelaxed_i + relax_XSigmas * DGoError_RxnToBeRelaxed_i;
         fprintf('Relaxation of %s : %0.3f +- %0.3f (sigma) ---> %0.3f +- %d*%0.3f \n', varNameToBeRelaxed, DGo_RxnToBeRelaxed_i, DGoError_RxnToBeRelaxed_i, DGo_RxnToBeRelaxed_i, relax_XSigmas, DGoError_RxnToBeRelaxed_i)
         refRangeAndRelaxedRange = [DGo_RxnToBeRelaxed_i + DGoError_RxnToBeRelaxed_i*[- 1 1] DGo_RxnToBeRelaxed_i + relax_XSigmas*DGoError_RxnToBeRelaxed_i*[- 1 1]];
         relaxedDGoVarsValues = [relaxedDGoVarsValues; [varNameToBeRelaxed num2cell(refRangeAndRelaxedRange)]];
@@ -168,13 +168,25 @@ if isempty(solTFA.x) || solTFA.val<minObjSolVal
     id_RelaxedVarNames_inOrigModel = find_cell(relaxedDGoVarsValues(:,1), model.varNames);
     model.var_lb(id_RelaxedVarNames_inOrigModel) = cell2mat(relaxedDGoVarsValues(:, 4));
     model.var_ub(id_RelaxedVarNames_inOrigModel) = cell2mat(relaxedDGoVarsValues(:, 5));
-    solRelaxed = solveTFAmodelCplex(model);
     
-    if isempty(solRelaxed.x) || solRelaxed.val<minObjSolVal
-        error('Although we relaxed the DGo variables it was not possible to find a feasible solution!')
+    solRelaxed = solveTFAmodelCplex(model);
+    if isempty(solRelaxed.x)
+        error(['Although we relaxed the DGo variables it was not possible'...
+            'to find a feasible solution!'])
+        
+    elseif solRelaxed.val<minObjSolVal
+        if solRelaxed.val/minObjSolVal > 0.9
+            warning('Objective value after relaxation at %2.2g%% of requested value.',...
+                100*solRelaxed.val/minObjSolVal)
+        else
+            error(['The obtained objective value after relaxation was '...
+                'lower than 90%% of the requested objective value: %4.4g h^-1 (%2.2f%%)'],...
+                solRelaxed.val, 100*solRelaxed.val/minObjSolVal)
+        end
     end
 else
-    fprintf('It is possible to obtain TFA-feasible solutions with the original DGo values calculated by GCM!\n')
+    fprintf(['It is possible to obtain TFA-feasible solutions with the' ...
+        'original DGo values calculated by GCM!\n'])
 end
 
 end
