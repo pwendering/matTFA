@@ -251,6 +251,11 @@ for i=1:num_mets
    end
 end
 
+% set DGo and DGO error to 0
+modeloutput.metDeltaGFstd(startsWith(modeloutput.mets, {'prot_', 'pmet_'})) = 0;
+modeloutput.metDeltaGFerr(startsWith(modeloutput.mets, {'prot_', 'pmet_'})) = 0;
+modeloutput.metDeltaGFtr(startsWith(modeloutput.mets, {'prot_', 'pmet_'})) = 0;
+
 %%-----------------------------------------------------------------------%%
 %                              REACTIONS
 %%-----------------------------------------------------------------------%%
@@ -308,6 +313,10 @@ for i=1:num_rxns
     end
 
     [modeloutput,modeloutput.rxnMapResult{i}] = checkReactionBal(modeloutput,modeloutput.rxns(i),true);
+    
+    if any(startsWith(findMetsFromRxns(modeloutput, modeloutput.rxns(i)), 'pmet_'))
+        modeloutput.rxnMapResult{i} = 'balanced';
+    end
     
     if ~NotDrain || any(reactantDeltaGFstd > 0.9E+07) || length(reactants) >= 100 || strcmp(modeloutput.rxnMapResult{i},'missing atoms') || strcmp(modeloutput.rxnMapResult{i},'drain flux')
         
