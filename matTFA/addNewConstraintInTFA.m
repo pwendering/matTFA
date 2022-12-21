@@ -15,7 +15,7 @@ if appendFlag
 else
     % find last non-zero row and add variable at position of first
     % all-zero row
-    rowIdx = find(all(model.A,2),1,'last') + 1;
+    rowIdx = find(any(model.A,2),1,'last') + 1;
     model.constraintNames{rowIdx}   = CName; % strcat('DFSEU_',model.mets{i});
     model.constraintType{rowIdx}    = CType; % type of constraint: '<', or '>', or '='
     model.rhs(rowIdx)               = CRHS; % value of the right hand side

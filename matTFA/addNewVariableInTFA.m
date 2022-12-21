@@ -17,7 +17,7 @@ if appendFlag
 else
     % find last non-zero column and add variable at position of first
     % all-zero column
-    colIdx = find(all(model.A),1,'last') + 1;
+    colIdx = find(any(model.A),1,'last') + 1;
     model.varNames{colIdx} = VName; % fill in variable name
     model.var_lb(colIdx)   = VRange(1); % fill in lower bound
     model.var_ub(colIdx)   = VRange(2); % fill in upper bound
