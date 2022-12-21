@@ -174,8 +174,6 @@ end
 % INPUTS & CHECKS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-allRxnsRev = 1;
-
 % check if model reactions has been checked if they are transport reactions
 % if ~isfield(model,'isTrans')
 disp('Checking for transport reactions');
@@ -210,14 +208,42 @@ for i = 1:num_rxns
     model.rxns{i} = newrxnname;
 end
 
-% if all reversible parameter is indicated then we assume all reactions are reversible first except biomass
-% and create the Irrev version of the model
-if (allRxnsRev)
+% if there is no model field that indicates reaction reversibility, assume
+% that all reactions are reversible
+if ~isfield(model, 'rev')
     model.rev = ones(length(model.rev),1);
 end
 
 % create the A matrix using the S matrix first
-[modelIrrev, ~, ~, ~] = convertToIrreversibleAgador(model);
+if all(model.rev)
+    [modelIrrev, ~, ~, ~] = convertToIrreversibleAgador(model);
+else
+    % prepend F_ for forward direction and R_ for reverse direction
+    modelIrrev = model;
+    % forward reactions (COBRA and GECKO styles)
+    % => a forward reaction is either indicated as forward when a
+    % reversible reaction was split or is non-reverse
+    % GECKO reactions can contain No\d+ at the end of a reaction ID, which
+    % has to be trimmed
+    tmp_rxns = regexprep(model.rxns, 'No\d+$', '');
+    no_suffix = regexp(model.rxns, 'No\d+$', 'match');
+    no_suffix(cellfun('isempty', no_suffix)) = {{''}};
+    f_rxn_idx = endsWith(tmp_rxns, '_f') | ~endsWith(tmp_rxns, {'_b', '_REV'});
+    
+    % reverse reactions are all reactions that are not forards reactions
+    r_rxn_idx = ~f_rxn_idx;
+    
+    % update reaction IDs
+    tmp_rxns = regexprep(tmp_rxns, '_[fb]$', '');
+    tmp_rxns = regexprep(tmp_rxns, '_REV$', '');
+    tmp_rxns = arrayfun(@(i)strcat(tmp_rxns{i},no_suffix{i}),1:numel(tmp_rxns))';
+    
+    model.rxns = tmp_rxns;
+    modelIrrev.rxns(f_rxn_idx) = strcat('F_', tmp_rxns(f_rxn_idx));
+    modelIrrev.rxns(r_rxn_idx) = strcat('R_', tmp_rxns(r_rxn_idx));
+    
+    
+end
 model.A = modelIrrev.S;
 [num_mets, num_vars] = size(modelIrrev.S);
 objective = modelIrrev.rxns(find(modelIrrev.c));
@@ -336,7 +362,7 @@ if verboseFlag
     disp('Generating thermodynamic constraints for reactions');
 end
 
-for i = 1:num_rxns;
+for i = 1:num_rxns
     H2OtRxns = false;
     % check if it is a transport rxn for water which we do not create the
     % thermo constraints as well
@@ -463,30 +489,35 @@ for i = 1:num_rxns;
             CLHS.varCoeffs = [1          bigMtherm];
             model = addNewConstraintInTFA(model, strcat('FU_', model.rxns{i}),'<', CLHS, bigMtherm - epsilon);
         end
-        % BU_rxn: 1000 BU_rxn - DGR_rxn < 1000 + epsilon
-        model = addNewVariableInTFA(model, strcat('BU_', model.rxns{i}),'B',[0 1]);
-        BU_index = size(model.varNames,1);
-        if (model.rxnThermo(i) == 1)
-            CLHS.varIDs    = [DG_index   BU_index ];
-            CLHS.varCoeffs = [-1         bigMtherm];
-            model = addNewConstraintInTFA(model, strcat('BU_', model.rxns{i}),'<', CLHS, bigMtherm - epsilon);
+        
+        if ~isempty(R_flux_index)
+            % BU_rxn: 1000 BU_rxn - DGR_rxn < 1000 + epsilon
+            model = addNewVariableInTFA(model, strcat('BU_', model.rxns{i}),'B',[0 1]);
+            BU_index = size(model.varNames,1);
+            if (model.rxnThermo(i) == 1)
+                CLHS.varIDs    = [DG_index   BU_index ];
+                CLHS.varCoeffs = [-1         bigMtherm];
+                model = addNewConstraintInTFA(model, strcat('BU_', model.rxns{i}),'<', CLHS, bigMtherm - epsilon);
+            end
+            % create the prevent simultaneous use constraints
+            % U_rxn: FU_rxn + BU_rxn <= 1
+            CLHS.varIDs    = [FU_index  BU_index];
+            CLHS.varCoeffs = [+1        +1      ];
+            model = addNewConstraintInTFA(model, strcat('SU_', model.rxns{i}),'<', CLHS, 1);
         end
-        % create the prevent simultaneous use constraints
-        % U_rxn: FU_rxn + BU_rxn <= 1
-        CLHS.varIDs    = [FU_index  BU_index];
-        CLHS.varCoeffs = [+1        +1      ];
-        model = addNewConstraintInTFA(model, strcat('SU_', model.rxns{i}),'<', CLHS, 1);
+        
         % create constraints that control fluxes with their use variables
         % UF_rxn: F_rxn - M FU_rxn < 0
         CLHS.varIDs    = [F_flux_index  FU_index];
         CLHS.varCoeffs = [+1            -bigM   ];
         model = addNewConstraintInTFA(model, strcat('UF_', model.rxns{i}),'<', CLHS, 0);
         
-        % UR_rxn: R_rxn - M RU_rxn < 0
-        CLHS.varIDs    = [R_flux_index  BU_index];
-        CLHS.varCoeffs = [+1            -bigM   ];
-        model = addNewConstraintInTFA(model, strcat('UR_', model.rxns{i}),'<', CLHS, 0);
-        
+        if ~isempty(R_flux_index)
+            % UR_rxn: R_rxn - M RU_rxn < 0
+            CLHS.varIDs    = [R_flux_index  BU_index];
+            CLHS.varCoeffs = [+1            -bigM   ];
+            model = addNewConstraintInTFA(model, strcat('UR_', model.rxns{i}),'<', CLHS, 0);
+        end
         
         
         % Below we add to the model a variable for the log of the thermodynamic displacement (Gamma)
@@ -531,9 +562,11 @@ for i = 1:num_rxns;
                 CLHS.varCoeffs = [1                 100000    ];
                 model = addNewConstraintInTFA(model, strcat('FUThermoDisp_', model.rxns{i}), '<', CLHS, 100000 + Epsilon1);
                 
-                CLHS.varIDs    = [LnGamma_index     BU_index];
-                CLHS.varCoeffs = [1                 -100000   ];
-                model = addNewConstraintInTFA(model, strcat('BUThermoDisp_', model.rxns{i}), '>', CLHS, -100000 + Epsilon2);
+                if ~isempty(R_flux_index)
+                    CLHS.varIDs    = [LnGamma_index     BU_index];
+                    CLHS.varCoeffs = [1                 -100000   ];
+                    model = addNewConstraintInTFA(model, strcat('BUThermoDisp_', model.rxns{i}), '>', CLHS, -100000 + Epsilon2);
+                end
             end
         end
  
@@ -546,22 +579,29 @@ for i = 1:num_rxns;
         end
         model = addNewVariableInTFA(model, strcat('FU_', model.rxns{i}), 'B', [0 1]);
         FU_index = size(model.varNames,1);
-        model = addNewVariableInTFA(model, strcat('BU_', model.rxns{i}), 'B', [0 1]);
-        BU_index = size(model.varNames,1);
-        % create the prevent simultaneous use constraints
-        % SU_rxn: FU_rxn + BU_rxn <= 1
-        CLHS.varIDs    = [FU_index  BU_index];
-        CLHS.varCoeffs = [+1        +1      ];
-        model = addNewConstraintInTFA(model, strcat('SU_', model.rxns{i}), '<', CLHS, 1);
+        
+        if ~isempty(R_flux_index)
+            model = addNewVariableInTFA(model, strcat('BU_', model.rxns{i}), 'B', [0 1]);
+            BU_index = size(model.varNames,1);
+            % create the prevent simultaneous use constraints
+            % SU_rxn: FU_rxn + BU_rxn <= 1
+            CLHS.varIDs    = [FU_index  BU_index];
+            CLHS.varCoeffs = [+1        +1      ];
+            model = addNewConstraintInTFA(model, strcat('SU_', model.rxns{i}), '<', CLHS, 1);
+        end
+        
         % create constraints that control fluxes with their use variables
         % UF_rxn: F_rxn - 1000 FU_rxn < 0
         CLHS.varIDs    = [F_flux_index  FU_index];
         CLHS.varCoeffs = [+1            -bigM   ];
         model = addNewConstraintInTFA(model, strcat('UF_', model.rxns{i}), '<', CLHS, 0);
-        % UR_rxn: R_rxn - 1000 RU_rxn < 0
-        CLHS.varIDs    = [R_flux_index  BU_index];
-        CLHS.varCoeffs = [+1            -bigM   ];
-        model = addNewConstraintInTFA(model, strcat('UR_', model.rxns{i}), '<', CLHS, 0);
+        
+        if ~isempty(R_flux_index)
+            % UR_rxn: R_rxn - 1000 RU_rxn < 0
+            CLHS.varIDs    = [R_flux_index  BU_index];
+            CLHS.varCoeffs = [+1            -bigM   ];
+            model = addNewConstraintInTFA(model, strcat('UR_', model.rxns{i}), '<', CLHS, 0);
+        end
         
     end
     
