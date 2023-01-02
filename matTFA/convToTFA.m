@@ -215,10 +215,9 @@ end
 objective = modelIrrev.rxns(find(modelIrrev.c));
 
 % pre-allocate space for final matrix A to increase speed
-model.A = modelIrrev.S;
-model.A = [
-    model.A zeros(size(model.A,1), num_mets+num_rxns*7);
-    zeros(num_mets + num_rxns*12, size(model.A,2)+num_mets+num_rxns*7)];
+model.A = sparse([
+    modelIrrev.S zeros(size(model.A,1), num_mets+num_rxns*7);
+    zeros(num_mets + num_rxns*12, size(model.A,2)+num_mets+num_rxns*7)]);
 
 % check that num of metabolites remain the same
 if num_mets ~= num_mets_org
