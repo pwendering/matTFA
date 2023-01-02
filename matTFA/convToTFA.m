@@ -244,9 +244,14 @@ else
     
     
 end
-model.A = modelIrrev.S;
+
 [num_mets, num_vars] = size(modelIrrev.S);
 objective = modelIrrev.rxns(find(modelIrrev.c));
+
+% pre-allocate space for final matrix A to increase speed
+model.A = sparse([
+    modelIrrev.S zeros(num_mets, num_mets+num_rxns*7);
+    zeros(num_mets + num_rxns*12, num_vars+num_mets+num_rxns*7)]);
 
 % check that num of metabolites remain the same
 if num_mets ~= num_mets_org
@@ -254,11 +259,11 @@ if num_mets ~= num_mets_org
 end
 
 % Initialize fields (in case of existing, they are erased)
-model.constraintType = [];
-model.constraintNames = [];
-model.rhs = [];
-model.varNames = [];
-model.vartypes = [];
+model.constraintType = repmat({''}, size(model.A,1), 1);
+model.constraintNames = repmat({''}, size(model.A,1), 1);
+model.rhs = zeros(size(model.A,1), 1);
+model.varNames = repmat({''}, size(model.A,2), 1);
+model.vartypes = repmat({''}, size(model.A,2), 1);
 
 % create the constraint type vector first for mass balances
 % and the rhs vector first for mass balances
@@ -268,10 +273,18 @@ for i=1:num_mets
     model.rhs(i,1) = 0;
 end
 
+% create the constraint type vector first for mass balances
+% and the rhs vector first for mass balances
+for i=1:num_mets
+    model.constraintType{i} = '=';
+    model.constraintNames{i} = strcat('M_',model.mets{i});
+    model.rhs(i) = 0;
+end
+
 % create the variable type vector and setting their bounds, and lower and
 % upper bounds for the flux variables upperbounds should not be negative
-model.var_lb = zeros(num_vars,1);
-model.var_ub = zeros(num_vars,1);
+model.var_lb = zeros(size(model.A,2),1);
+model.var_ub = zeros(size(model.A,2),1);
 for i=1:num_vars
     if modelIrrev.ub(i) < 0
         modelIrrev.ub(i) = 0;
@@ -281,8 +294,8 @@ for i=1:num_vars
     end
     model.var_ub(i) = modelIrrev.ub(i);
     model.var_lb(i) = modelIrrev.lb(i);
-    model.varNames = modelIrrev.rxns;
-    model.vartypes{i,1} = 'C';
+    model.varNames{i} = modelIrrev.rxns{i};
+    model.vartypes{i} = 'C';
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -314,7 +327,8 @@ end
 disp('Generating thermodynamic constraints for metabolites');
 
 %% FOR EACH METABOLITE
-
+colIdx = num_vars;
+rowIdx = num_mets;
 for i = 1:num_mets
     % exclude protons and water and those without deltaGF
     % P_met: P_met - RT*LC_met = DGF_met
@@ -326,10 +340,14 @@ for i = 1:num_mets
     metLConc_ub = log(model.CompartmentData.compMaxConc(Comp_index));
     Comp_pH = model.CompartmentData.pH(Comp_index);
     
-    if strcmp(metformula,'H2O')
-        model = addNewVariableInTFA(model, strcat('LC_',model.mets{i}),'C',[0 0]);
-    elseif strcmp(metformula,'H')
-        model = addNewVariableInTFA(model, strcat('LC_',model.mets{i}),'C',[log(10^(-Comp_pH)) log(10^(-Comp_pH))]);
+    if strcmp(metformula,'H2O');
+        colIdx = colIdx + 1;
+        model = addNewVariableInTFA(model, strcat('LC_',model.mets{i}),'C',...
+            [0 0], false, colIdx);
+    elseif strcmp(metformula,'H');
+        colIdx = colIdx + 1;
+        model = addNewVariableInTFA(model, strcat('LC_',model.mets{i}),'C',...
+            [log(10^(-Comp_pH)) log(10^(-Comp_pH))], false, colIdx);
     elseif strcmp(model.metSEEDID{i},'cpd11416')
         % we do not create the thermo variables for biomass metabolite
 %     elseif startsWith(model.mets{i},{'prot_', 'pmet_'})
@@ -341,16 +359,24 @@ for i = 1:num_mets
             fprintf('generating thermo variables for %s\n',model.mets{i});
         end
         if flagToAddPotentials
-            model = addNewVariableInTFA(model, strcat('P_',model.mets{i}),'C',[P_lb P_ub]);
+            colIdx = colIdx + 1;
+            model = addNewVariableInTFA(model, strcat('P_',model.mets{i}),...
+                'C',[P_lb P_ub], false, colIdx);
             P_index = size(model.varNames,1);
-            model = addNewVariableInTFA(model, strcat('LC_',model.mets{i}),'C',[metLConc_lb metLConc_ub]);
+            colIdx = colIdx + 1;
+            model = addNewVariableInTFA(model, strcat('LC_',model.mets{i}),...
+                'C',[metLConc_lb metLConc_ub], false, colIdx);
             LC_index = size(model.varNames,1);
             % Formulate the constraint
             CLHS.varIDs    = [P_index  LC_index];
             CLHS.varCoeffs = [1        -RT     ];
-            model = addNewConstraintInTFA(model, strcat('P_',model.mets{i}),'=',CLHS, metDeltaGF);
+            rowIdx = rowIdx + 1;
+            model = addNewConstraintInTFA(model, strcat('P_',model.mets{i}),...
+                '=',CLHS, metDeltaGF, false, rowIdx);
         else
-            model = addNewVariableInTFA(model, strcat('LC_',model.mets{i}),'C',[metLConc_lb metLConc_ub]);
+            colIdx = colIdx + 1;
+            model = addNewVariableInTFA(model, strcat('LC_',model.mets{i}),...
+                'C',[metLConc_lb metLConc_ub], false, colIdx);
         end
     else
         fprintf('NOT generating thermo variables for %s\n',model.mets{i});
@@ -454,19 +480,26 @@ for i = 1:num_rxns
             end
         end
         
-        model = addNewVariableInTFA(model, strcat('DG_', model.rxns{i}), 'C', [DGR_lb DGR_ub]);
+        colIdx = colIdx + 1;
+        model = addNewVariableInTFA(model, strcat('DG_', model.rxns{i}),...
+            'C', [DGR_lb DGR_ub], false, colIdx);
         DG_index = size(model.varNames,1);
         
         % add the delta G naught as a variable
         RxnDGoRerror  = model.rxnDeltaGRerr(i);
         model = addNewVariableInTFA(model, strcat('DGo_', model.rxns{i}),'C', DGo + [-RxnDGoRerror RxnDGoRerror]);
+        colIdx = colIdx + 1;
+        model = addNewVariableInTFA(model, strcat('DGo_', model.rxns{i}),...
+            'C', DGo + [-RxnDGoRerror RxnDGoRerror], false, colIdx);
         DGo_index = size(model.varNames,1);
         
         % G: -DG_rxn + DGo + RT*StoichCoefProd1*LC_prod1 + RT*StoichCoefProd2*LC_prod2 + RT*StoichCoefSub1*LC_subs1  + RT*StoichCoefSub2*LC_subs2  - ... = 0'
         % Formulate the constraint
         CLHS.varIDs    = [DG_index   DGo_index  LC_TransMet_indexes  LC_ChemMet_indexes];
         CLHS.varCoeffs = [-1         1          LC_TransMet_Coeffs   LC_ChemMet_Coeffs];
-        model = addNewConstraintInTFA(model, strcat('G_', model.rxns{i}), '=', CLHS, 0);
+        rowIdx = rowIdx + 1;
+        model = addNewConstraintInTFA(model, strcat('G_', model.rxns{i}), '=',...
+            CLHS, 0, false, rowIdx);
         
         
         % create the use variables constraints and connect them to the
@@ -482,41 +515,55 @@ for i = 1:num_rxns
         % exactly the same reason in the symmetric constraint later on.    %
         %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
         epsilon = 1e-6;
-        model = addNewVariableInTFA(model, strcat('FU_', model.rxns{i}), 'B', [0 1]);
+        colIdx = colIdx + 1;
+        model = addNewVariableInTFA(model, strcat('FU_', model.rxns{i}),...
+            'B', [0 1], false, colIdx);
         FU_index = size(model.varNames,1);
         if (model.rxnThermo(i) == 1)
             CLHS.varIDs    = [DG_index   FU_index ];
             CLHS.varCoeffs = [1          bigMtherm];
-            model = addNewConstraintInTFA(model, strcat('FU_', model.rxns{i}),'<', CLHS, bigMtherm - epsilon);
+            rowIdx = rowIdx + 1;
+            model = addNewConstraintInTFA(model, strcat('FU_', model.rxns{i}),...
+                '<', CLHS, bigMtherm - epsilon, false, rowIdx);
         end
         
         if ~isempty(R_flux_index)
             % BU_rxn: 1000 BU_rxn - DGR_rxn < 1000 + epsilon
-            model = addNewVariableInTFA(model, strcat('BU_', model.rxns{i}),'B',[0 1]);
+            colIdx = colIdx + 1;
+            model = addNewVariableInTFA(model, strcat('BU_', model.rxns{i}),...
+                'B',[0 1], false, colIdx);
             BU_index = size(model.varNames,1);
             if (model.rxnThermo(i) == 1)
                 CLHS.varIDs    = [DG_index   BU_index ];
                 CLHS.varCoeffs = [-1         bigMtherm];
-                model = addNewConstraintInTFA(model, strcat('BU_', model.rxns{i}),'<', CLHS, bigMtherm - epsilon);
+                rowIdx = rowIdx + 1;
+                model = addNewConstraintInTFA(model, strcat('BU_', model.rxns{i}),...
+                    '<', CLHS, bigMtherm - epsilon, false, rowIdx);
             end
             % create the prevent simultaneous use constraints
             % U_rxn: FU_rxn + BU_rxn <= 1
             CLHS.varIDs    = [FU_index  BU_index];
             CLHS.varCoeffs = [+1        +1      ];
-            model = addNewConstraintInTFA(model, strcat('SU_', model.rxns{i}),'<', CLHS, 1);
+            rowIdx = rowIdx + 1;
+            model = addNewConstraintInTFA(model, strcat('SU_', model.rxns{i}),...
+                '<', CLHS, 1, false, rowIdx);
         end
         
         % create constraints that control fluxes with their use variables
         % UF_rxn: F_rxn - M FU_rxn < 0
         CLHS.varIDs    = [F_flux_index  FU_index];
         CLHS.varCoeffs = [+1            -bigM   ];
-        model = addNewConstraintInTFA(model, strcat('UF_', model.rxns{i}),'<', CLHS, 0);
-        
+        rowIdx = rowIdx + 1;
+        model = addNewConstraintInTFA(model, strcat('UF_', model.rxns{i}),...
+            '<', CLHS, 0, false, rowIdx);
+                
         if ~isempty(R_flux_index)
             % UR_rxn: R_rxn - M RU_rxn < 0
             CLHS.varIDs    = [R_flux_index  BU_index];
             CLHS.varCoeffs = [+1            -bigM   ];
-            model = addNewConstraintInTFA(model, strcat('UR_', model.rxns{i}),'<', CLHS, 0);
+            rowIdx = rowIdx + 1;
+            model = addNewConstraintInTFA(model, strcat('UR_', model.rxns{i}),...
+                '<', CLHS, 0, false, rowIdx);
         end
         
         
@@ -537,12 +584,16 @@ for i = 1:num_rxns
         % Therefore We adopt the latter formulation, that is also simpler.
         
         if flagToAddLnThermoDisp == 1
-            model = addNewVariableInTFA(model,strcat('LnGamma_',model.rxns{i}),'C',[-100000 100000]);
+            colIdx = colIdx + 1;
+            model = addNewVariableInTFA(model,strcat('LnGamma_',model.rxns{i}),...
+                'C',[-100000 100000], false, colIdx);
             LnGamma_index = size(model.varNames,1);
             
             CLHS.varIDs    = [LnGamma_index     DG_index];
             CLHS.varCoeffs = [1                 -1/RT ];
-            model = addNewConstraintInTFA(model, strcat('ThermoDisp_', model.rxns{i}), '=', CLHS, 0);
+            rowIdx = rowIdx + 1;
+            model = addNewConstraintInTFA(model, strcat('ThermoDisp_', model.rxns{i}),...
+                '=', CLHS, 0, false, rowIdx);
             
             % Here we add MCA constraints on LnGamma_ so that we ensure a
             % rection is not at equilibrium ie. Gamma ~= 1 !!!
@@ -560,12 +611,16 @@ for i = 1:num_rxns
                 
                 CLHS.varIDs    = [LnGamma_index     FU_index];
                 CLHS.varCoeffs = [1                 100000    ];
-                model = addNewConstraintInTFA(model, strcat('FUThermoDisp_', model.rxns{i}), '<', CLHS, 100000 + Epsilon1);
+                rowIdx = rowIdx + 1;
+                model = addNewConstraintInTFA(model, strcat('FUThermoDisp_', model.rxns{i}),...
+                    '<', CLHS, 100000 + Epsilon1, false, rowIdx);
                 
                 if ~isempty(R_flux_index)
                     CLHS.varIDs    = [LnGamma_index     BU_index];
                     CLHS.varCoeffs = [1                 -100000   ];
-                    model = addNewConstraintInTFA(model, strcat('BUThermoDisp_', model.rxns{i}), '>', CLHS, -100000 + Epsilon2);
+                    rowIdx = rowIdx + 1;
+                    model = addNewConstraintInTFA(model, strcat('BUThermoDisp_', model.rxns{i}),...
+                        '>', CLHS, -100000 + Epsilon2, false, rowIdx);
                 end
             end
         end
@@ -577,30 +632,40 @@ for i = 1:num_rxns
         if verboseFlag
             fprintf('generating only use constraints for reaction %s\n', model.rxns{i});
         end
-        model = addNewVariableInTFA(model, strcat('FU_', model.rxns{i}), 'B', [0 1]);
+        colIdx = colIdx + 1;
+        model = addNewVariableInTFA(model, strcat('FU_', model.rxns{i}),...
+            'B', [0 1], false, colIdx);
         FU_index = size(model.varNames,1);
         
         if ~isempty(R_flux_index)
-            model = addNewVariableInTFA(model, strcat('BU_', model.rxns{i}), 'B', [0 1]);
+            colIdx = colIdx + 1;
+            model = addNewVariableInTFA(model, strcat('BU_', model.rxns{i}),...
+                'B', [0 1], false, colIdx);
             BU_index = size(model.varNames,1);
             % create the prevent simultaneous use constraints
             % SU_rxn: FU_rxn + BU_rxn <= 1
             CLHS.varIDs    = [FU_index  BU_index];
             CLHS.varCoeffs = [+1        +1      ];
-            model = addNewConstraintInTFA(model, strcat('SU_', model.rxns{i}), '<', CLHS, 1);
+            rowIdx = rowIdx + 1;
+            model = addNewConstraintInTFA(model, strcat('SU_', model.rxns{i}),...
+                '<', CLHS, 1, false, rowIdx);
         end
-        
+
         % create constraints that control fluxes with their use variables
         % UF_rxn: F_rxn - 1000 FU_rxn < 0
         CLHS.varIDs    = [F_flux_index  FU_index];
         CLHS.varCoeffs = [+1            -bigM   ];
-        model = addNewConstraintInTFA(model, strcat('UF_', model.rxns{i}), '<', CLHS, 0);
+        rowIdx = rowIdx + 1;
+        model = addNewConstraintInTFA(model, strcat('UF_', model.rxns{i}),...
+            '<', CLHS, 0, false, rowIdx);
         
         if ~isempty(R_flux_index)
             % UR_rxn: R_rxn - 1000 RU_rxn < 0
             CLHS.varIDs    = [R_flux_index  BU_index];
             CLHS.varCoeffs = [+1            -bigM   ];
-            model = addNewConstraintInTFA(model, strcat('UR_', model.rxns{i}), '<', CLHS, 0);
+            rowIdx = rowIdx + 1;
+            model = addNewConstraintInTFA(model, strcat('UR_', model.rxns{i}),...
+                '<', CLHS, 0, false, rowIdx);
         end
         
     end
