@@ -18,6 +18,8 @@ else
     model.constraintNames{rowIdx}   = CName; % strcat('DFSEU_',model.mets{i});
     model.constraintType{rowIdx}    = CType; % type of constraint: '<', or '>', or '='
     model.rhs(rowIdx)               = CRHS; % value of the right hand side
-    model.A(rowIdx,CLHS.varIDs)     = CLHS.varCoeffs; % coefficients of the involved variables
+    newRows                         = sparse(numel(rowIdx), size(model.A,2));
+    newRows(CLHS.varIDs)            = CLHS.varCoeffs;
+    model.A(rowIdx,:)               = newRows; % coefficients of the involved variables
 end
 end
