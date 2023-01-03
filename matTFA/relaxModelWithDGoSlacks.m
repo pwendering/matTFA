@@ -72,8 +72,8 @@ if isempty(solTFA.x) || solTFA.val<minObjSolVal
         % Only add the slack variables if:
         % - DGoError of the corresponding reaction is not flagged with large values
         % - the reaction is NOT hydrogen transport
-        isHTransport = isequal(model.metFormulas(model.S(:,id_correspRxn)>0),'H') && isequal(model.metFormulas(model.S(:,id_correspRxn)<0),'H');
-        if modelwDGoSlackVars.rxnDeltaGRerr(id_correspRxn, 1) < 1E6 && ~isHTransport
+        isHTransport = isequal(model.metFormulas(model.S(:,id_correspRxn(1))>0),'H') && isequal(model.metFormulas(model.S(:,id_correspRxn(1))<0),'H');
+        if all(modelwDGoSlackVars.rxnDeltaGRerr(id_correspRxn, 1) < 1E6) && ~isHTransport
             modelwDGoSlackVars = addNewVariableInTFA(modelwDGoSlackVars, strcat('DGPosSlack_', correspRxnName), 'C', [0 1000]);
             modelwDGoSlackVars = addNewVariableInTFA(modelwDGoSlackVars, strcat('DGNegSlack_', correspRxnName), 'C', [0 1000]);
         end
@@ -165,9 +165,11 @@ if isempty(solTFA.x) || solTFA.val<minObjSolVal
     [[{'varName','LB-before','UB-before','LB-relaxed','UB-relaxed'}];relaxedDGoVarsValues]
     
     % If we set the relaxed bounds to the original model
-    id_RelaxedVarNames_inOrigModel = find_cell(relaxedDGoVarsValues(:,1), model.varNames);
-    model.var_lb(id_RelaxedVarNames_inOrigModel) = cell2mat(relaxedDGoVarsValues(:, 4));
-    model.var_ub(id_RelaxedVarNames_inOrigModel) = cell2mat(relaxedDGoVarsValues(:, 5));
+    for i = 1:size(relaxedDGoVarsValues,1)
+        tmpIdx = find_cell(relaxedDGoVarsValues(i,1), model.varNames);
+        model.var_lb(tmpIdx) = cell2mat(relaxedDGoVarsValues(i, 4));
+        model.var_ub(tmpIdx) = cell2mat(relaxedDGoVarsValues(i, 5));
+    end
     
     solRelaxed = solveTFAmodelCplex(model);
     if isempty(solRelaxed.x)
