@@ -225,6 +225,7 @@ else
     % reversible reaction was split or is non-reverse
     % GECKO reactions can contain No\d+ at the end of a reaction ID, which
     % has to be trimmed
+    orig_rxns = model.rxns;
     tmp_rxns = regexprep(model.rxns, 'No\d+$', '');
     no_suffix = regexp(model.rxns, 'No\d+$', 'match');
     no_suffix(cellfun('isempty', no_suffix)) = {{''}};
@@ -241,7 +242,6 @@ else
     model.rxns = tmp_rxns;
     modelIrrev.rxns(f_rxn_idx) = strcat('F_', tmp_rxns(f_rxn_idx));
     modelIrrev.rxns(r_rxn_idx) = strcat('R_', tmp_rxns(r_rxn_idx));
-    
     
 end
 
@@ -340,20 +340,16 @@ for i = 1:num_mets
     metLConc_ub = log(model.CompartmentData.compMaxConc(Comp_index));
     Comp_pH = model.CompartmentData.pH(Comp_index);
     
-    if strcmp(metformula,'H2O');
+    if strcmp(metformula,'H2O')
         colIdx = colIdx + 1;
         model = addNewVariableInTFA(model, strcat('LC_',model.mets{i}),'C',...
             [0 0], false, colIdx);
-    elseif strcmp(metformula,'H');
+    elseif strcmp(metformula,'H')
         colIdx = colIdx + 1;
         model = addNewVariableInTFA(model, strcat('LC_',model.mets{i}),'C',...
             [log(10^(-Comp_pH)) log(10^(-Comp_pH))], false, colIdx);
     elseif strcmp(model.metSEEDID{i},'cpd11416')
         % we do not create the thermo variables for biomass metabolite
-%     elseif startsWith(model.mets{i},{'prot_', 'pmet_'})
-%         % add dummy variable for proteins so thermo constraints can be
-%         % generated
-%         model = addNewVariableInTFA(model, strcat('LC_',model.mets{i}),'C',[0 0]);
     elseif  (metDeltaGF < 1E6)
         if verboseFlag
             fprintf('generating thermo variables for %s\n',model.mets{i});
@@ -362,11 +358,11 @@ for i = 1:num_mets
             colIdx = colIdx + 1;
             model = addNewVariableInTFA(model, strcat('P_',model.mets{i}),...
                 'C',[P_lb P_ub], false, colIdx);
-            P_index = size(model.varNames,1);
+            P_index = colIdx;
             colIdx = colIdx + 1;
             model = addNewVariableInTFA(model, strcat('LC_',model.mets{i}),...
                 'C',[metLConc_lb metLConc_ub], false, colIdx);
-            LC_index = size(model.varNames,1);
+            LC_index = colIdx;
             % Formulate the constraint
             CLHS.varIDs    = [P_index  LC_index];
             CLHS.varCoeffs = [1        -RT     ];
@@ -387,7 +383,9 @@ end
 if verboseFlag
     disp('Generating thermodynamic constraints for reactions');
 end
-
+% find first occurrences of each reaction ID (duplicate for forward and
+% reverse)
+[~,uniqRxnIdx] = unique(model.rxns, 'stable');
 for i = 1:num_rxns
     H2OtRxns = false;
     % check if it is a transport rxn for water which we do not create the
@@ -414,9 +412,7 @@ for i = 1:num_rxns
     %     - flagged with 1 in the field 'model.rxnThermo' (generated in prepModelForTFA)
     %     - not a H2O transport
     %     - not a drain reaction (e.g. ' A <=> ')
-    %     - not a protein draw reaction (GECKO ecmodel)
-    %     - not an arm reaction (GECKO ecmodel)
-    if (model.rxnThermo(i) == 1) && (~H2OtRxns) && (~isDrain)
+    if (model.rxnThermo(i) == 1) && (~H2OtRxns) && (~isDrain) && ismember(i, uniqRxnIdx)
         % Then we will add thermodynamic constraints
         
         % We need to exclude protons and for water we can put the deltaGf in
@@ -440,13 +436,13 @@ for i = 1:num_rxns
         if (model.isTrans(i) == 1)
             % calculate the DG-naught component associated to transport of the
             % metabolite.
-            [trans_compound, trans_stoich, chem_stoich] = findTransportedMet(reactantIDs, stoich, metCompartments);
+            [trans_compound, ~, chem_stoich] = findTransportedMet(reactantIDs, stoich, metCompartments);
             DGo = calcDGtpt_RHS(reactantIDs, stoich, metCompartments, model.CompartmentData, ReactionDB);
-            trans_met = reactants(find(ismember(reactantIDs, trans_compound)));
-            trans_met_stoich = stoich(find(ismember(reactantIDs, trans_compound)));
+            trans_met = reactants(ismember(reactantIDs, trans_compound));
+            trans_met_stoich = stoich(ismember(reactantIDs, trans_compound));
             % Adding the terms for the transport part
             for j=1:length(trans_met)
-                metIndex = find(ismember(model.mets, trans_met{j,1}));
+                metIndex = ismember(model.mets, trans_met{j,1});
                 metformula = model.metFormulas{metIndex};
                 if (~strcmp(metformula,'H'))
                     varIndex = find(ismember(model.varNames, strcat('LC_',trans_met{j,1})));
@@ -483,15 +479,14 @@ for i = 1:num_rxns
         colIdx = colIdx + 1;
         model = addNewVariableInTFA(model, strcat('DG_', model.rxns{i}),...
             'C', [DGR_lb DGR_ub], false, colIdx);
-        DG_index = size(model.varNames,1);
+        DG_index = colIdx;
         
         % add the delta G naught as a variable
         RxnDGoRerror  = model.rxnDeltaGRerr(i);
-        model = addNewVariableInTFA(model, strcat('DGo_', model.rxns{i}),'C', DGo + [-RxnDGoRerror RxnDGoRerror]);
         colIdx = colIdx + 1;
         model = addNewVariableInTFA(model, strcat('DGo_', model.rxns{i}),...
             'C', DGo + [-RxnDGoRerror RxnDGoRerror], false, colIdx);
-        DGo_index = size(model.varNames,1);
+        DGo_index = colIdx;
         
         % G: -DG_rxn + DGo + RT*StoichCoefProd1*LC_prod1 + RT*StoichCoefProd2*LC_prod2 + RT*StoichCoefSub1*LC_subs1  + RT*StoichCoefSub2*LC_subs2  - ... = 0'
         % Formulate the constraint
@@ -518,7 +513,7 @@ for i = 1:num_rxns
         colIdx = colIdx + 1;
         model = addNewVariableInTFA(model, strcat('FU_', model.rxns{i}),...
             'B', [0 1], false, colIdx);
-        FU_index = size(model.varNames,1);
+        FU_index = colIdx;
         if (model.rxnThermo(i) == 1)
             CLHS.varIDs    = [DG_index   FU_index ];
             CLHS.varCoeffs = [1          bigMtherm];
@@ -532,7 +527,7 @@ for i = 1:num_rxns
             colIdx = colIdx + 1;
             model = addNewVariableInTFA(model, strcat('BU_', model.rxns{i}),...
                 'B',[0 1], false, colIdx);
-            BU_index = size(model.varNames,1);
+            BU_index = colIdx;
             if (model.rxnThermo(i) == 1)
                 CLHS.varIDs    = [DG_index   BU_index ];
                 CLHS.varCoeffs = [-1         bigMtherm];
@@ -587,7 +582,7 @@ for i = 1:num_rxns
             colIdx = colIdx + 1;
             model = addNewVariableInTFA(model,strcat('LnGamma_',model.rxns{i}),...
                 'C',[-100000 100000], false, colIdx);
-            LnGamma_index = size(model.varNames,1);
+            LnGamma_index = colIdx;
             
             CLHS.varIDs    = [LnGamma_index     DG_index];
             CLHS.varCoeffs = [1                 -1/RT ];
@@ -625,8 +620,8 @@ for i = 1:num_rxns
             end
         end
  
-        % (2) For all other reactions:
-    else
+        % (2) For all other reactions except duplicates:
+    elseif ismember(i, uniqRxnIdx)
         % We DON'T add thermodynamic constraints! We only add constraints
         % for the forward and reverse fluxes.
         if verboseFlag
@@ -635,13 +630,13 @@ for i = 1:num_rxns
         colIdx = colIdx + 1;
         model = addNewVariableInTFA(model, strcat('FU_', model.rxns{i}),...
             'B', [0 1], false, colIdx);
-        FU_index = size(model.varNames,1);
+        FU_index = colIdx;
         
         if ~isempty(R_flux_index)
             colIdx = colIdx + 1;
             model = addNewVariableInTFA(model, strcat('BU_', model.rxns{i}),...
                 'B', [0 1], false, colIdx);
-            BU_index = size(model.varNames,1);
+            BU_index = colIdx;
             % create the prevent simultaneous use constraints
             % SU_rxn: FU_rxn + BU_rxn <= 1
             CLHS.varIDs    = [FU_index  BU_index];
@@ -742,6 +737,25 @@ if (printLP)
 end
 
 disp('Creating the TFA model');
+
+% remove all excessive columns
+removeIdx = (find(any(model.A),1,'last') + 1):size(model.A,2);
+model.A(:,removeIdx) = [];
+model.varNames(removeIdx) = [];
+model.vartypes(removeIdx) = [];
+model.var_lb(removeIdx) = [];
+model.var_ub(removeIdx) = [];
+model.f(removeIdx) = [];
+
+% find last all-zero row and remove all excessive rows
+removeIdx = (find(any(model.A,2),1,'last') + 1):size(model.A,1);
+model.A(removeIdx,:) = [];
+model.constraintType(removeIdx) = [];
+model.constraintNames(removeIdx) = [];
+model.rhs(removeIdx) = [];
+
+% revert model reaction IDs
+model.rxns = orig_rxns;
 
 % collecting the new thermodynamics model
 model.objtype = -1; % 1 : minimize, -1 : maximize
