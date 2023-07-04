@@ -136,6 +136,7 @@ disp('Fetching compounds thermodynamic data');
 modeloutput.metDeltaGFstd   = repmat(1E+07,num_mets,1);
 modeloutput.metDeltaGFerr   = repmat(1E+07,num_mets,1);
 modeloutput.metDeltaGFtr    = repmat(1E+07,num_mets,1);
+modeloutput.metDeltaSstd    = repmat(1E+07,num_mets,1);
 modeloutput.metCharge       = zeros(num_mets,1);
 modeloutput.metMass         = repmat(1E+07,num_mets,1);
 modeloutput.struct_cues     = repmat({[]},num_mets,1);
@@ -263,6 +264,7 @@ modeloutput.metDeltaGFtr(startsWith(modeloutput.mets, {'prot_', 'pmet_'})) = 0;
 
 modeloutput.rxnThermo = zeros(num_rxns,1);
 modeloutput.rxnDeltaGR = 1e7*ones(num_rxns,1);
+modeloutput.rxnDeltaSR = 1e7*ones(num_rxns,1);
 modeloutput.rxnDeltaGRerr = 1e7*ones(num_rxns,1);
 modeloutput.rxnComp = repmat({'c'},num_rxns,1);
 modeloutput.rxnMapResult = repmat({''},num_rxns,1);
@@ -350,6 +352,7 @@ for i=1:num_rxns
 
             modeloutput.rxnDeltaGR(i) = -rhs(i);
         else
+            % Gibbs energy of formation difference
             for j=1:length(reactants)
 
                 metindex = find(ismember(modeloutput.mets,reactants{j}));
@@ -357,18 +360,21 @@ for i=1:num_rxns
                 if ~strcmp(modeloutput.metFormulas{metindex},'H')               
                     DeltaGrxn = DeltaGrxn + stoich(j)*modeloutput.metDeltaGFtr(metindex);
                     DeltaGRerr = DeltaGRerr + abs(stoich(j)*modeloutput.metDeltaGFerr(metindex));
-                    
-                    DeltaSrxn = DeltaSrxn + stoich(j)*modeloutput.metDeltaSstd(metindex);
                 end
             end
+            modeloutput.rxnDeltaGR(i) = DeltaGrxn;
             
-            % adjust Gibbs free energy difference to temperature using
-            % formula proposed by Du et al. 2018 (DOI:10.1016/j.bpj.2018.04.030)
-            if ~isnan(DeltaSrxn)
-                modeloutput.rxnDeltaGR(i) = DeltaGrxn - (T - T_REF) * DeltaSrxn;
-            else
-                modeloutput.rxnDeltaGR(i) = DeltaGrxn;
+            % entropy of formation difference
+            if ~any(modeloutput.metDeltaSstd(met_indices)>0.9E+07)
+                for j=1:length(reactants)
+                    metindex = find(ismember(modeloutput.mets,reactants{j}));
+                    if ~strcmp(modeloutput.metFormulas{metindex},'H')
+                        DeltaSrxn = DeltaSrxn + stoich(j)*modeloutput.metDeltaSstd(metindex);
+                    end
+                end
+                modeloutput.rxnDeltaSR(i) = DeltaSrxn;
             end
+            
 
         end
 
@@ -382,6 +388,64 @@ for i=1:num_rxns
         
         modeloutput.rxnDeltaGRerr(i) = DeltaGRerr;
         
+    end
+end
+
+% if ecModel, deal with arm reactions
+if any(startsWith(modeloutput.rxns, 'arm_'))
+    % arm_* reactions create the pmet_* pseudometabolite that is then used by a
+    % number of reactions with include prot_* metabolites with -1/kcat coeffs
+    % use sum of dGo of first and second reaction of arm reactions
+    arm_rxns = modeloutput.rxns(startsWith(modeloutput.rxns, 'arm_'));
+    for i = 1:numel(arm_rxns)
+        % pmet_* metabolite
+        pmet = modeloutput.mets(modeloutput.S(:, findRxnIDs(modeloutput, arm_rxns(i)))==1);
+        % find reactions that consume that pmet
+        adj_rxns = modeloutput.rxns(modeloutput.S(findMetIDs(modeloutput, pmet),:)==-1);
+        % update deltaGo, DGoerr, and deltaSo
+        if any([modeloutput.rxnDeltaGR(findRxnIDs(modeloutput, adj_rxns)); ...
+                modeloutput.rxnDeltaGR(findRxnIDs(modeloutput, arm_rxns(i)))] == 1e7)
+            
+            modeloutput.rxnDeltaGR(findRxnIDs(modeloutput, adj_rxns)) = 1e7;
+            modeloutput.rxnDeltaGRerr(findRxnIDs(modeloutput, adj_rxns)) = 1e7;
+            modeloutput.rxnDeltaSR(findRxnIDs(modeloutput, adj_rxns)) = 1e7;
+            
+        else
+            modeloutput.rxnDeltaGR(findRxnIDs(modeloutput, adj_rxns)) = min(...
+                modeloutput.rxnDeltaGR(findRxnIDs(modeloutput, adj_rxns)) + ...
+                modeloutput.rxnDeltaGR(findRxnIDs(modeloutput, arm_rxns(i))),...
+                1e7);
+            modeloutput.rxnDeltaGRerr(findRxnIDs(modeloutput, adj_rxns)) = min(...
+                modeloutput.rxnDeltaGRerr(findRxnIDs(modeloutput, adj_rxns)) + ...
+                modeloutput.rxnDeltaGRerr(findRxnIDs(modeloutput, arm_rxns(i))),...
+                1e7);
+            modeloutput.rxnDeltaSR(findRxnIDs(modeloutput, adj_rxns)) = min(...
+                modeloutput.rxnDeltaSR(findRxnIDs(modeloutput, adj_rxns)) + ...
+                modeloutput.rxnDeltaSR(findRxnIDs(modeloutput, arm_rxns(i))),...
+                1e7);
+        end
+        % set Gibbs free energy difference and entropy difference to
+        % default value for arm reactions
+        modeloutput.rxnDeltaGR(findRxnIDs(modeloutput, arm_rxns(i))) = 1e7;
+        modeloutput.rxnDeltaGRerr(findRxnIDs(modeloutput, arm_rxns(i))) = 1e7;
+        modeloutput.rxnDeltaSR(findRxnIDs(modeloutput, arm_rxns(i))) = 1e7;
+    end
+end
+
+% adjust Gibbs free energy difference to temperature using
+% formula proposed by Du et al. 2018 (DOI:10.1016/j.bpj.2018.04.030)
+for i=1:num_rxns
+    if NotDrain && ~any(reactantDeltaGFstd > 0.9E+07) && length(reactants) < 100 && ...
+            ~strcmp(modeloutput.rxnMapResult{i},'missing atoms') && ...
+            ~strcmp(modeloutput.rxnMapResult{i},'drain flux') && ...
+            ~startsWith(modeloutput.rxns{i}, {'arm_', 'draw_prot_', 'prot_pool_exchange'})
+        if ~modeloutput.isTrans(i)
+            DeltaGrxn = modeloutput.rxnDeltaGR(i);
+            DeltaSrxn = modeloutput.rxnDeltaSR(i);
+            if ~isnan(DeltaSrxn)
+                modeloutput.rxnDeltaGR(i) = DeltaGrxn - (T - T_REF) * DeltaSrxn;
+            end
+        end
     end
 end
 
