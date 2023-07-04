@@ -63,10 +63,19 @@ if isempty(solTFA.x) || solTFA.val<minObjSolVal
         id_G_constraints(id_G_ToExclude) = [];
     end
     
-    for i = 1:size(id_G_constraints, 1)
+    slackVarIDs = cellfun(@(x)regexprep(x, '^(G_)', ''),...
+        modelwDGoSlackVars.constraintNames(id_G_constraints), 'un', 0);
+    % remove NoX tag from reactions (GECKO model
+    if any(startsWith(model.rxns, 'arm_')) && any(startsWith(model.mets, 'prot_'))
+        slackVarIDsUnique = unique(cellfun(@(x)regexprep(x, 'No\d+$', ''),...
+            slackVarIDs, 'un', 0), 'stable');
+    else
+        slackVarIDsUnique = slackVarIDs;
+    end
+    for i = 1:numel(slackVarIDsUnique)
         % From each G-constraint get the corresponding
         % - reaction name
-        correspRxnName = regexprep(modelwDGoSlackVars.constraintNames{id_G_constraints(i)}, '^(G_)', '');
+        correspRxnName = slackVarIDs{find(startsWith(slackVarIDs, slackVarIDsUnique{i}), 1)};
         % - and reaction index
         id_correspRxn = find_cell(correspRxnName, modelwDGoSlackVars.rxns);
         % Only add the slack variables if:
@@ -74,11 +83,15 @@ if isempty(solTFA.x) || solTFA.val<minObjSolVal
         % - the reaction is NOT hydrogen transport
         isHTransport = isequal(model.metFormulas(model.S(:,id_correspRxn(1))>0),'H') && isequal(model.metFormulas(model.S(:,id_correspRxn(1))<0),'H');
         if all(modelwDGoSlackVars.rxnDeltaGRerr(id_correspRxn, 1) < 1E6) && ~isHTransport
+            correspRxnName = regexprep(correspRxnName, 'No\d+$', '');
             modelwDGoSlackVars = addNewVariableInTFA(modelwDGoSlackVars, strcat('DGPosSlack_', correspRxnName), 'C', [0 1000]);
             modelwDGoSlackVars = addNewVariableInTFA(modelwDGoSlackVars, strcat('DGNegSlack_', correspRxnName), 'C', [0 1000]);
         end
-        modelwDGoSlackVars.A(id_G_constraints(i), [end-1 end]) = [1 -1];
+        row_idx = id_G_constraints(startsWith(slackVarIDs, correspRxnName));
+        modelwDGoSlackVars.A(row_idx, [end-1 end]) = ...
+            repmat([1 -1], size(row_idx));
     end
+    
     
     if ~exist('minObjSolVal','var') || isempty(minObjSolVal)
         minObjSolVal = 1e-6;
@@ -127,10 +140,35 @@ if isempty(solTFA.x) || solTFA.val<minObjSolVal
     % Go to each of the DG-constraints that need to be relaxed, and
     % find by how many sigmas this constraint need to be relaced
     rxnNamesToBeRelaxed = regexprep(DGoSlackVars, '(^DGNegSlack_)|(^DGPosSlack_)', '');
+    if any(startsWith(model.rxns, 'arm_')) && any(startsWith(model.mets, 'prot_'))
+        % if we are dealing with an ecModel, search for corresponding
+        % reaction duplicates
+        tmp_res = cellfun(@(x)regexp(model.rxns, [x 'No\d+$'], 'match'),...
+            rxnNamesToBeRelaxed, 'un', 0);
+        tmp_res = [tmp_res{:}];
+        rxn_ids = [tmp_res{~cellfun(@isempty, tmp_res)}]';
+        
+%         new_slack_var_array = zeros(size(rxn_ids));
+%         for i = 1:numel(rxnNamesToBeRelaxed)
+%             idx = startsWith(rxn_ids, rxnNamesToBeRelaxed(i));
+%             new_slack_var_array(idx) = DGoSlackValues(i);
+%         end
+%         
+        rxnNamesToBeRelaxed = rxn_ids;
+%         DGoSlackValues = new_slack_var_array;
+    end
+    % Since suffixes for forward and and reverse directions of reactions
+    % were removed, there are duplicate reaction IDs.
+    % In this case, the DGo error for both directions will be relaxed,
+    % which is reasonable, because the relaxation should affect both
+    % directions. This was also the case in the original implementation but
+    % is an issue now, because GECKO ecModels contain only irreversible
+    % reactions.
     id_rxnNamesToBeRelaxed = find_cell(rxnNamesToBeRelaxed, model.rxns);
+    rxnNamesToBeRelaxed = model.rxns(id_rxnNamesToBeRelaxed);
     
     model.rxnDeltaGRerr_updated = model.rxnDeltaGRerr;
-    for i = 1:size(rxnNamesToBeRelaxed,1)
+    for i = 1:numel(id_rxnNamesToBeRelaxed)
         
         % Get the name of the i-th DG-naught variable that needs to be relaxed
         varNameToBeRelaxed = ['DGo_',rxnNamesToBeRelaxed{i}];
@@ -145,6 +183,10 @@ if isempty(solTFA.x) || solTFA.val<minObjSolVal
         
         % Find the slacks names and variables that are associated with this reaction:
         PosNegSlackVars_i = [{['DGNegSlack_',rxnNamesToBeRelaxed{i}]};{['DGPosSlack_',rxnNamesToBeRelaxed{i}]}];
+        if any(startsWith(model.rxns, 'arm_')) && any(startsWith(model.mets, 'prot_'))
+            PosNegSlackVars_i = cellfun(@(x)regexprep(x, 'No\d+$', ''),...
+                PosNegSlackVars_i, 'un', 0);
+        end     
         DGoSlackVar_i   = DGoSlackVars(find_cell(PosNegSlackVars_i,DGoSlackVars));
         DGoSlackValue_i = DGoSlackValues(find_cell(PosNegSlackVars_i,DGoSlackVars));
         
