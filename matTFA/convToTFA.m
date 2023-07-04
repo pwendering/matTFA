@@ -754,9 +754,6 @@ model.constraintType(removeIdx) = [];
 model.constraintNames(removeIdx) = [];
 model.rhs(removeIdx) = [];
 
-% revert model reaction IDs
-model.rxns = orig_rxns;
-
 % collecting the new thermodynamics model
 model.objtype = -1; % 1 : minimize, -1 : maximize
 model.types = ReactionDB.vartypes;
@@ -769,5 +766,7 @@ elseif strcmp(flagInfeasibility,'NO')
     fprintf('Upon TFA conversion, feasibility has not been tested!\n')
 end
 
+% revert model reaction IDs
+model.rxns = orig_rxns;
 
 end
